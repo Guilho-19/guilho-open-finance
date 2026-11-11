@@ -1,0 +1,72 @@
+body {
+  font-family: sans-serif;
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+
+button {
+  padding: 10px 16px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+pre {
+  background: #f4f4f4;
+  padding: 15px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+.box {
+  border: 1px solid #ddd;
+  padding: 16px;
+  border-radius: 6px;
+  margin-top: 20px;
+}
+
+.cards-grid {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.card-conta {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 200px;
+  background: #fafafa;
+}
+
+.card-conta small {
+  color: #666;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.card-conta h4 {
+  margin: 6px 0;
+}
+
+.saldo {
+  font-size: 22px;
+  font-weight: bold;
+  color: #1a7f37;
+  margin: 8px 0 0 0;
+}
+
+.saldo.credito {
+  color: #cf222e;
+}
+
+.json-detalhes {
+  margin-top: 20px;
+}
+
+.json-detalhes summary {
+  cursor: pointer;
+  color: #555;
+}

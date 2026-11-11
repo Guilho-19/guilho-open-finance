@@ -3,12 +3,7 @@
     <head>
         <meta charset="UTF-8">
         <script src="https://cdn.pluggy.ai/pluggy-connect/latest/pluggy-connect.js"></script>
-        <style>
-            body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
-            button { padding: 10px 16px; cursor: pointer; margin-right: 10px; }
-            pre { background: #f4f4f4; padding: 15px; border-radius: 6px; overflow-x: auto; }
-            .box { border: 1px solid #ddd; padding: 16px; border-radius: 6px; margin-top: 20px; }
-        </style>
+        <link rel="stylesheet" href="style.css">    
     </head>
 
     <body>
@@ -17,18 +12,30 @@
         <div class="box">
             <h3>1. Conexão</h3>
             <button id="btn-conectar">Vincular MeuPluggy</button>
-            <p´><strong>Item ID atual:</strong> <span id="item-id-display">Nenhum</span></p>
+            <p><strong>Item ID atual:</strong> <span id="item-id-display">Nenhum</span></p>
         </div>
 
         <div class="box">
-            <h3>2. Dados Brutos das Contas</h3>
-            <button id="btnc-buscar-contas">Buscar Contas deste Item</button>
-            <pre id="saida-json">Os dados aparecerão aqui...</pre>
+            <h3>2. Saldo das Contas</h3>
+            <button id="btn-buscar-contas">Buscar Contas deste Item</button>
+            <div id="lista-saldos" class="cards-grid"></div>
+            <details style="margin-top: 20px;">
+                <summary style="cursor: pointer; color: #555;">Ver JSON bruto retornado pela API</summary>
+                <pre id="saida-json">Os dados aparecerão aqui...</pre>
+            </details>
         </div>
 
         <script>
             const itemDisplay = document.getElementById('item-id-display');
             const saidaJson = document.getElementById('saida-json');
+            const listaSaldos = document.getElementById('lista-saldos');
+
+            const formatarMoeda = (valor) => {
+                return new Intl.NumberFormat('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL'
+                }).format(valor);
+            };
 
             let itemIdAtual = localStorage.getItem('meu_pluggy_item_id');
             if (itemIdAtual) {
@@ -59,10 +66,29 @@
                     alert('Vincule o MeuPluggy primeiro para ter um Item ID!');
                     return;
                 }
-                saidaJson.textContent = 'Carregando constas...';
-                const res = await fetch('/api/accounts/${itemIDAtual}');
+                listaSaldos.innerHTML = 'Carregando...';
+                const res = await fetch(`/api/accounts/${itemIDAtual}`);
                 const dados = await res.json();
                 saidaJson.textContent = JSON.stringify(dados, null, 2);
+
+                listaSaldos.innerHTML = '';
+
+                dados.results.forEach((conta) => {
+                    const isCard = conta.type === 'CREDIT';
+                    const tipoLegivel = isCard ? 'Cartão de Crédito (Fatura)' : 'Conta Bancária (Saldo)';
+                    
+                    const card = document.createElement('div');
+                    card.className = 'card-conta';
+                    card.innerHTML = `
+                        <small>${tipoLegivel}</small>
+                        <h4>${conta.name}</h4>
+                        <p class="saldo ${isCard ? 'credito' : ''}">
+                            ${formatarMoeda(conta.balance)}
+                        </p>
+                    `;
+
+                    listaSaldos.appendChild(card);
+                });
             });
         </script>
     </body>
