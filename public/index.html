@@ -9,159 +9,949 @@
     <body>
         <h1>Meu Dashboard Financeiro</h1>
 
-        <div class="box">
-            <h3>1. Conexão</h3>
-            <button id="btn-conectar">Vincular MeuPluggy</button>
-            <p><strong>Item ID atual:</strong> <span id="item-id-display">Nenhum</span></p>
+        <nav class="abas-nav">
+            <button class="aba-btn ativa" data-aba="aba-visao-geral">Visão Geral e Saldos</button>
+            <button class="aba-btn" data-aba="aba-transacoes">
+                Todas as Transações <span id="contador-transacoes-aba" class="badge-aba">0</span>
+            </button>
+        </nav>
+
+        <div id="aba-visao-geral" class="aba-conteudo ativa">
+            <div class="box">
+                <div class="cabecalho-secao">
+                    <h3>1. Meus Bancos</h3>
+                    <span id="contador-bancos" class="badge-contador">0 / 3 bancos</span>
+                </div>
+
+                <div class="acoes-conexao">
+                    <button id="btn-conectar" class="btn-primario">+ Vincular Banco (MeuPluggy)</button>
+                    <div class="importar-id-form">
+                        <input
+                            type="text"
+                            id="input-item-id"
+                            placeholder="Ou cole um Item ID existente (UUID)..."
+                        />
+                        <button id="btn-adicionar-id">Importar ID</button>
+                    </div>
+                </div>
+
+                <div id="lista-bancos-conectados" class="bancos-slots"></div>
+            </div>
+
+            <div class="box">
+                <div class="cabecalho-secao">
+                    <h3>2. Saldo das Contas e Faturas</h3>
+                    <button id="btn-buscar-contas" class="btn-primario">Buscar Contas de Todos os Bancos</button>
+                </div>
+
+                <div id="resumo-geral" class="resumo-geral" style="display: none;"></div>
+                <div id="lista-saldos" class="bancos-resultados"></div>
+
+                <details class="json-detalhes">
+                    <summary>Ver JSON bruto retornado pela API</summary>
+                    <pre id="saida-json">Os dados aparecerão aqui...</pre>
+                </details>
+            </div>
         </div>
 
-        <div class="box">
-            <h3>2. Saldo das Contas</h3>
-            <button id="btn-buscar-contas">Buscar Contas deste Item</button>
-            <div id="lista-saldos" class="cards-grid"></div>
-            <details class="json-detalhes">
-                <summary>Ver JSON bruto retornado pela API</summary>
-                <pre id="saida-json">Os dados aparecerão aqui...</pre>
-            </details>
+        <div id="aba-transacoes" class="aba-conteudo">
+            <div class="box">
+                <div class="cabecalho-secao">
+                    <h3>Histórico de Todas as Transações</h3>
+                    <button id="btn-atualizar-transacoes" class="btn-primario">Atualizar Transações</button>
+                </div>
+
+                <div class="filtros-transacoes">
+                    <input
+                        type="text"
+                        id="filtro-busca"
+                        placeholder="Buscar por descrição, estabelecimento ou categoria..."
+                    />
+                    <select id="filtro-banco">
+                        <option value="TODOS">Todos os bancos</option>
+                    </select>
+                    <select id="filtro-tipo-conta">
+                        <option value="TODOS">Todas as origens</option>
+                        <option value="CREDIT">Cartão de Crédito</option>
+                        <option value="BANK">Conta Bancária</option>
+                    </select>
+                    <select id="filtro-mes">
+                        <option value="TODOS">Todos os meses</option>
+                    </select>
+                    <select id="filtro-titularidade">
+                        <option value="TODAS">Todas (próprias neutras)</option>
+                        <option value="TERCEIROS">Apenas contas terceiras</option>
+                        <option value="PROPRIAS">Apenas entre contas próprias</option>
+                    </select>
+                </div>
+
+                <div id="resumo-transacoes" class="resumo-geral" style="display: none;"></div>
+
+                <div id="container-tabela-transacoes" class="tabela-wrapper">
+                    <p class="texto-suave">Clique em "Atualizar Transações" ou busque as contas para visualizar o histórico.</p>
+                </div>
+            </div>
         </div>
 
         <script>
-            const itemDisplay = document.getElementById('item-id-display');
+            const contadorBancos = document.getElementById('contador-bancos');
+            const listaBancosEl = document.getElementById('lista-bancos-conectados');
+            const inputItemId = document.getElementById('input-item-id');
+            const resumoGeralEl = document.getElementById('resumo-geral');
             const saidaJson = document.getElementById('saida-json');
             const listaSaldos = document.getElementById('lista-saldos');
+
+            const contadorTransacoesAba = document.getElementById('contador-transacoes-aba');
+            const filtroBusca = document.getElementById('filtro-busca');
+            const filtroBanco = document.getElementById('filtro-banco');
+            const filtroTipoConta = document.getElementById('filtro-tipo-conta');
+            const filtroMes = document.getElementById('filtro-mes');
+            const filtroTitularidade = document.getElementById('filtro-titularidade');
+            const resumoTransacoesEl = document.getElementById('resumo-transacoes');
+            const containerTabelaTransacoes = document.getElementById('container-tabela-transacoes');
+
+            const META_BANCOS = 3;
+            const NOMES_BANCOS_PADRAO = ['XP', 'Itau', 'Nubank'];
+            const STORAGE_KEY = 'meu_pluggy_bancos';
+
+            let todasTransacoes = [];
+            let dadosJaCarregados = false;
+
+            // Controle de Abas
+            document.querySelectorAll('.aba-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.aba-btn').forEach((b) => b.classList.remove('ativa'));
+                    document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.remove('ativa'));
+
+                    btn.classList.add('ativa');
+                    const idAba = btn.dataset.aba;
+                    document.getElementById(idAba).classList.add('ativa');
+
+                    if (idAba === 'aba-transacoes' && !dadosJaCarregados && bancosConectados.length > 0) {
+                        buscarContasDeTodosOsBancos();
+                    }
+                });
+            });
 
             const formatarMoeda = (valor) => {
                 return new Intl.NumberFormat('pt-BR', {
                     style: 'currency',
                     currency: 'BRL'
-                }).format(valor);
+                }).format(Number(valor) || 0);
             };
 
-            let itemIdAtual = localStorage.getItem('meu_pluggy_item_id');
-            if (itemIdAtual) {
-                itemDisplay.textContent = itemIdAtual;
+            function nomePadraoSlot(idx) {
+                return NOMES_BANCOS_PADRAO[idx] || `Banco ${idx + 1}`;
             }
 
-            document.getElementById('btn-conectar').addEventListener('click', async () => {
+            function carregarBancosSalvos() {
+                let lista = [];
+                try {
+                    const salvo = localStorage.getItem(STORAGE_KEY);
+                    if (salvo) {
+                        lista = JSON.parse(salvo);
+                    }
+                } catch (e) {
+                    lista = [];
+                }
+
+                // Migra o Item ID antigo (único) caso exista e ainda não esteja na lista
+                const itemAntigo = localStorage.getItem('meu_pluggy_item_id');
+                if (itemAntigo && !lista.some((b) => b.id === itemAntigo)) {
+                    lista.push({
+                        id: itemAntigo,
+                        slotIndex: 0,
+                        nome: nomePadraoSlot(0),
+                        logo: null
+                    });
+                }
+
+                // Garante que cada banco nos 3 slots use o nome fixo: 1=XP, 2=Itau, 3=Nubank
+                lista.forEach((b, idx) => {
+                    const slotIdx = typeof b.slotIndex === 'number' ? b.slotIndex : idx;
+                    b.slotIndex = slotIdx;
+                    b.nome = nomePadraoSlot(slotIdx);
+                });
+
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(lista));
+                return lista;
+            }
+
+            let bancosConectados = carregarBancosSalvos();
+
+            function salvarBancos() {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(bancosConectados));
+                renderizarSlotsBancos();
+            }
+
+            function proximoSlotLivre() {
+                for (let i = 0; i < META_BANCOS; i++) {
+                    if (!bancosConectados.some((b) => b.slotIndex === i)) {
+                        return i;
+                    }
+                }
+                return bancosConectados.length;
+            }
+
+            function adicionarOuAtualizarBanco(id, logo = null, slotPreferido = null) {
+                const idLimpo = (id || '').trim();
+                if (!idLimpo) return false;
+
+                const existente = bancosConectados.find((b) => b.id === idLimpo);
+                if (existente) {
+                    if (slotPreferido !== null && slotPreferido !== undefined) {
+                        existente.slotIndex = Number(slotPreferido);
+                    }
+                    existente.nome = nomePadraoSlot(existente.slotIndex);
+                    if (logo) existente.logo = logo;
+                } else {
+                    const slotIdx =
+                        slotPreferido !== null && slotPreferido !== undefined
+                            ? Number(slotPreferido)
+                            : proximoSlotLivre();
+
+                    // Se já havia outro item ocupando esse slot específico, substitui no slot
+                    bancosConectados = bancosConectados.filter((b) => b.slotIndex !== slotIdx);
+
+                    bancosConectados.push({
+                        id: idLimpo,
+                        slotIndex: slotIdx,
+                        nome: nomePadraoSlot(slotIdx),
+                        logo
+                    });
+                }
+
+                bancosConectados.sort((a, b) => a.slotIndex - b.slotIndex);
+                salvarBancos();
+                return true;
+            }
+
+            function removerBanco(id) {
+                bancosConectados = bancosConectados.filter((b) => b.id !== id);
+                salvarBancos();
+            }
+
+            async function abrirPluggyConnect(itemIdParaAtualizar = null, slotIndex = null) {
                 const res = await fetch('/api/connect-token', { method: 'POST' });
                 const { accessToken } = await res.json();
-                const pluggyConnect = new PluggyConnect({
+                const opcoes = {
                     connectToken: accessToken,
                     onSuccess: (itemData) => {
-                        itemIdAtual = itemData.item.id;
-                        localStorage.setItem('meu_pluggy_item_id', itemIdAtual);
-                        itemDisplay.textContent = itemIdAtual;
+                        const item = itemData.item;
+                        const logoBanco = item.connector?.imageUrl || null;
+                        adicionarOuAtualizarBanco(item.id, logoBanco, slotIndex);
                         saidaJson.textContent = JSON.stringify(itemData, null, 2);
+                        buscarContasDeTodosOsBancos();
                     },
                     onError: (erro) => {
                         console.error('Erro na conexão: ', erro);
                     }
-                });
+                };
 
+                if (itemIdParaAtualizar) {
+                    opcoes.updateItem = itemIdParaAtualizar;
+                }
+
+                const pluggyConnect = new PluggyConnect(opcoes);
                 pluggyConnect.init();
-            });
+            }
 
-            document.getElementById('btn-buscar-contas').addEventListener('click', async () => {
-                if (!itemIdAtual) {
-                    alert('Vincule o MeuPluggy primeiro para ter um Item ID!');
-                    return;
-                }
-                listaSaldos.innerHTML = 'Carregando...';
-                const res = await fetch(`/api/accounts/${itemIdAtual}`);
-                const dados = await res.json();
-                saidaJson.textContent = JSON.stringify(dados, null, 2);
+            function renderizarSlotsBancos() {
+                contadorBancos.textContent = `${bancosConectados.length} / ${META_BANCOS} bancos`;
+                listaBancosEl.innerHTML = '';
 
-                listaSaldos.innerHTML = '';
+                const maxSlot = bancosConectados.reduce(
+                    (max, b) => Math.max(max, (b.slotIndex || 0) + 1),
+                    META_BANCOS
+                );
 
-                if (!res.ok || !Array.isArray(dados.results)) {
-                    listaSaldos.textContent = 'Erro ao buscar contas. Verifique o JSON bruto para detalhes.';
-                    return;
-                }
+                for (let i = 0; i < maxSlot; i++) {
+                    const banco = bancosConectados.find((b) => b.slotIndex === i);
+                    const nomeSlot = nomePadraoSlot(i);
+                    const slot = document.createElement('div');
 
-                dados.results.forEach((conta) => {
-                    const isCard = conta.type === 'CREDIT';
-                    const tipoLegivel = isCard ? 'Cartão de Crédito (Fatura do Mês)' : 'Conta Bancária (Saldo)';
-                    
-                    const card = document.createElement('div');
-                    card.className = `card-conta ${isCard ? 'card-credito' : ''}`;
-
-                    if (isCard && conta.faturaDetalhada) {
-                        const f = conta.faturaDetalhada;
-                        const faturaFechada = f.faturaFechadaMesVigente;
-                        const dataVencFechada = faturaFechada?.dueDate
-                            ? new Date(faturaFechada.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
-                            : '-';
-
-                        const itensCicloHtml = [
-                            ...f.faturaAberta.lancamentosRecentes.map((item) => `
-                                <li>
-                                    <span>${item.description} <small>(${new Date(item.date).toLocaleDateString('pt-BR')})</small></span>
-                                    <strong>${formatarMoeda(item.amount)}</strong>
-                                </li>
-                            `),
-                            ...f.faturaAberta.parcelasAtivas.map((parc) => `
-                                <li>
-                                    <span>${parc.description} <small>(Parcela ${parc.parcelaAtual})</small></span>
-                                    <strong>${formatarMoeda(parc.amount)}</strong>
-                                </li>
-                            `)
-                        ].join('');
-
-                        card.innerHTML = `
-                            <small>${tipoLegivel} • Ref. ${f.mesReferencia}</small>
-                            <h4>${conta.name}</h4>
-                            <p class="saldo credito">
-                                ${formatarMoeda(f.faturaAberta.total)}
-                            </p>
-                            <div class="detalhes-fatura">
-                                <div class="linha-fatura">
-                                    <span>Compras no ciclo aberto:</span>
-                                    <strong>${formatarMoeda(f.faturaAberta.comprasAvulsasCiclo)}</strong>
-                                </div>
-                                <div class="linha-fatura">
-                                    <span>Parcelas deste mês:</span>
-                                    <strong>${formatarMoeda(f.faturaAberta.parcelasDoMes)}</strong>
-                                </div>
-                                ${faturaFechada ? `
-                                <div class="linha-fatura separador">
-                                    <span>Fatura fechada (venc. ${dataVencFechada}):</span>
-                                    <strong>
-                                        ${formatarMoeda(faturaFechada.totalAmount)}
-                                        <span class="badge-status ${faturaFechada.paga ? 'paga' : 'aberta'}">
-                                            ${faturaFechada.paga ? 'Paga' : 'Em aberto'}
-                                        </span>
-                                    </strong>
-                                </div>
-                                ` : ''}
-                                <div class="linha-fatura">
-                                    <span>Parcelas de meses futuros:</span>
-                                    <strong>${formatarMoeda(f.parcelasMesesFuturos)}</strong>
-                                </div>
-                                <div class="linha-fatura texto-secundario">
-                                    <span>Limite total utilizado (soma geral):</span>
-                                    <strong>${formatarMoeda(f.limiteUtilizadoTotal)}</strong>
+                    if (banco) {
+                        slot.className = 'slot-banco conectado';
+                        slot.innerHTML = `
+                            <div class="slot-info">
+                                ${banco.logo ? `<img src="${banco.logo}" alt="${nomeSlot}" class="banco-logo" />` : `<div class="banco-avatar">${i + 1}</div>`}
+                                <div>
+                                    <strong>${nomeSlot}</strong>
+                                    <code class="item-id-code">${banco.id}</code>
                                 </div>
                             </div>
-                            <details class="lancamentos-fatura">
-                                <summary>Ver itens da fatura atual (${f.faturaAberta.lancamentosRecentes.length + f.faturaAberta.parcelasAtivas.length})</summary>
-                                <ul class="lista-lancamentos">
-                                    ${itensCicloHtml || '<li>Nenhum lançamento no ciclo atual.</li>'}
-                                </ul>
-                            </details>
+                            <div class="slot-acoes">
+                                <button class="btn-pequeno" data-acao="atualizar" data-id="${banco.id}" data-slot="${i}" title="Atualizar sincronização">Atualizar</button>
+                                <button class="btn-pequeno btn-perigo" data-acao="remover" data-id="${banco.id}" title="Remover este banco">Remover</button>
+                            </div>
                         `;
                     } else {
-                        card.innerHTML = `
-                            <small>${tipoLegivel}</small>
-                            <h4>${conta.name}</h4>
-                            <p class="saldo ${isCard ? 'credito' : ''}">
-                                ${formatarMoeda(conta.balance)}
-                            </p>
+                        slot.className = 'slot-banco vazio';
+                        slot.innerHTML = `
+                            <div class="slot-info">
+                                <div class="banco-avatar vazio">${i + 1}</div>
+                                <div>
+                                    <strong>${nomeSlot} — Não vinculado</strong>
+                                    <span class="texto-suave">Clique para conectar o banco ${nomeSlot}</span>
+                                </div>
+                            </div>
+                            <button class="btn-pequeno" data-acao="conectar" data-slot="${i}">+ Vincular</button>
                         `;
                     }
 
-                    listaSaldos.appendChild(card);
-                });
+                    listaBancosEl.appendChild(slot);
+                }
+            }
+
+            listaBancosEl.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-acao]');
+                if (!btn) return;
+                const acao = btn.dataset.acao;
+                const id = btn.dataset.id;
+                const slot = btn.dataset.slot !== undefined ? Number(btn.dataset.slot) : null;
+
+                if (acao === 'conectar') {
+                    abrirPluggyConnect(null, slot);
+                } else if (acao === 'atualizar' && id) {
+                    abrirPluggyConnect(id, slot);
+                } else if (acao === 'remover' && id) {
+                    removerBanco(id);
+                }
             });
+
+            document.getElementById('btn-conectar').addEventListener('click', () => {
+                abrirPluggyConnect(null, proximoSlotLivre());
+            });
+
+            document.getElementById('btn-adicionar-id').addEventListener('click', () => {
+                const id = inputItemId.value.trim();
+                if (!id) {
+                    alert('Informe um Item ID válido.');
+                    return;
+                }
+                adicionarOuAtualizarBanco(id, null, proximoSlotLivre());
+                inputItemId.value = '';
+                buscarContasDeTodosOsBancos();
+            });
+
+            function criarCardConta(conta) {
+                const isCard = conta.type === 'CREDIT';
+                const tipoLegivel = isCard ? 'Cartão de Crédito (Fatura do Mês)' : 'Conta Bancária (Saldo)';
+
+                const card = document.createElement('div');
+                card.className = `card-conta ${isCard ? 'card-credito' : ''}`;
+
+                if (isCard && conta.faturaDetalhada) {
+                    const f = conta.faturaDetalhada;
+                    const faturaFechada = f.faturaFechadaMesVigente;
+                    const dataVencFechada = faturaFechada?.dueDate
+                        ? new Date(faturaFechada.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+                        : '-';
+
+                    const itensCicloHtml = [
+                        ...f.faturaAberta.lancamentosRecentes.map((item) => `
+                            <li>
+                                <span>${item.description} <small>(${new Date(item.date).toLocaleDateString('pt-BR')})</small></span>
+                                <strong>${formatarMoeda(item.amount)}</strong>
+                            </li>
+                        `),
+                        ...f.faturaAberta.parcelasAtivas.map((parc) => `
+                            <li>
+                                <span>${parc.description} <small>(Parcela ${parc.parcelaAtual})</small></span>
+                                <strong>${formatarMoeda(parc.amount)}</strong>
+                            </li>
+                        `)
+                    ].join('');
+
+                    card.innerHTML = `
+                        <small>${tipoLegivel} • Ref. ${f.mesReferencia}</small>
+                        <h4>${conta.name}</h4>
+                        <p class="saldo credito">
+                            ${formatarMoeda(f.faturaAberta.total)}
+                        </p>
+                        <div class="detalhes-fatura">
+                            <div class="linha-fatura">
+                                <span>Compras no ciclo aberto:</span>
+                                <strong>${formatarMoeda(f.faturaAberta.comprasAvulsasCiclo)}</strong>
+                            </div>
+                            <div class="linha-fatura">
+                                <span>Parcelas deste mês:</span>
+                                <strong>${formatarMoeda(f.faturaAberta.parcelasDoMes)}</strong>
+                            </div>
+                            ${faturaFechada ? `
+                            <div class="linha-fatura separador">
+                                <span>Fatura fechada (venc. ${dataVencFechada}):</span>
+                                <strong>
+                                    ${formatarMoeda(faturaFechada.totalAmount)}
+                                    <span class="badge-status ${faturaFechada.paga ? 'paga' : 'aberta'}">
+                                        ${faturaFechada.paga ? 'Paga' : 'Em aberto'}
+                                    </span>
+                                </strong>
+                            </div>
+                            ` : ''}
+                            <div class="linha-fatura">
+                                <span>Parcelas de meses futuros:</span>
+                                <strong>${formatarMoeda(f.parcelasMesesFuturos)}</strong>
+                            </div>
+                            <div class="linha-fatura texto-secundario">
+                                <span>Limite total utilizado (soma geral):</span>
+                                <strong>${formatarMoeda(f.limiteUtilizadoTotal)}</strong>
+                            </div>
+                        </div>
+                        <details class="lancamentos-fatura">
+                            <summary>Ver itens da fatura atual (${f.faturaAberta.lancamentosRecentes.length + f.faturaAberta.parcelasAtivas.length})</summary>
+                            <ul class="lista-lancamentos">
+                                ${itensCicloHtml || '<li>Nenhum lançamento no ciclo atual.</li>'}
+                            </ul>
+                        </details>
+                    `;
+                } else {
+                    card.innerHTML = `
+                        <small>${tipoLegivel}</small>
+                        <h4>${conta.name}</h4>
+                        <p class="saldo ${isCard ? 'credito' : ''}">
+                            ${formatarMoeda(conta.balance)}
+                        </p>
+                    `;
+                }
+
+                return card;
+            }
+
+            function atualizarOpcoesFiltrosTransacoes() {
+                const valorBancoAtual = filtroBanco.value;
+                const valorMesAtual = filtroMes.value;
+
+                // Bancos únicos presentes nas transações (ou conectados)
+                filtroBanco.innerHTML = '<option value="TODOS">Todos os bancos</option>';
+                bancosConectados.forEach((b) => {
+                    const opt = document.createElement('option');
+                    opt.value = b.id;
+                    opt.textContent = b.nome;
+                    filtroBanco.appendChild(opt);
+                });
+                if ([...filtroBanco.options].some((o) => o.value === valorBancoAtual)) {
+                    filtroBanco.value = valorBancoAtual;
+                }
+
+                // Meses únicos (YYYY-MM) das transações ordenados do mais recente ao mais antigo
+                const mesesSet = new Set();
+                todasTransacoes.forEach((t) => {
+                    if (t.mesAnoChave) mesesSet.add(t.mesAnoChave);
+                });
+                const mesesOrdenados = [...mesesSet].sort((a, b) => b.localeCompare(a));
+
+                filtroMes.innerHTML = '<option value="TODOS">Todos os meses</option>';
+                mesesOrdenados.forEach((chave) => {
+                    const [ano, mes] = chave.split('-');
+                    const opt = document.createElement('option');
+                    opt.value = chave;
+                    opt.textContent = `${mes}/${ano}`;
+                    filtroMes.appendChild(opt);
+                });
+                if ([...filtroMes.options].some((o) => o.value === valorMesAtual)) {
+                    filtroMes.value = valorMesAtual;
+                }
+            }
+
+            function apenasDigitos(str) {
+                return (str || '').replace(/\D/g, '');
+            }
+
+            function normalizarTexto(str) {
+                return (str || '')
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .toUpperCase()
+                    .trim();
+            }
+
+            function nomeCorrespondeAoTitular(nomeCandidato, nomesTitularSet) {
+                const cand = normalizarTexto(nomeCandidato);
+                if (!cand || cand.length < 4) return false;
+                for (const titular of nomesTitularSet) {
+                    if (!titular) continue;
+                    if (cand === titular || cand.includes(titular) || titular.includes(cand)) {
+                        return true;
+                    }
+                    const partesTitular = titular.split(/\s+/).filter((p) => p.length > 2);
+                    const partesCand = cand.split(/\s+/).filter((p) => p.length > 2);
+                    if (
+                        partesTitular.length >= 2 &&
+                        partesCand.length >= 2 &&
+                        partesTitular[0] === partesCand[0] &&
+                        partesTitular[partesTitular.length - 1] === partesCand[partesCand.length - 1]
+                    ) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            function classificarMovimentacoesProprias(transacoes, cpfsTitularSet, nomesTitularSet, contasTitularSet) {
+                // 1ª Passada: verificação direta por CPF, nome do titular, conta, categoria da Pluggy e pagamento de fatura
+                transacoes.forEach((t) => {
+                    const payer = t.paymentData?.payer;
+                    const receiver = t.paymentData?.receiver;
+                    const docPagador = apenasDigitos(payer?.documentNumber?.value);
+                    const docRecebedor = apenasDigitos(receiver?.documentNumber?.value);
+
+                    const contraparte = t.type === 'DEBIT' ? receiver : payer;
+                    const docContraparte = t.type === 'DEBIT' ? docRecebedor : docPagador;
+                    const nomeContraparte = contraparte?.name || '';
+                    const contaContraparte = apenasDigitos(contraparte?.accountNumber);
+
+                    t.contraparteNome = nomeContraparte || t.merchantName || '';
+                    t.contraparteDoc = contraparte?.documentNumber?.value || '';
+
+                    const catNorm = normalizarTexto(t.category);
+                    const descNorm = normalizarTexto(t.description);
+                    const catId = String(t.categoryId || '');
+
+                    let ehPropria = false;
+                    let motivoPropria = '';
+
+                    // 1. Pagamento da própria fatura de cartão ou aplicação/resgate automático interno
+                    if (
+                        t.ehPagamentoFatura ||
+                        catId === '05100000' ||
+                        catNorm.includes('CREDIT CARD PAYMENT') ||
+                        descNorm.includes('PGTO FATURA') ||
+                        descNorm.includes('PAGAMENTO DE FATURA') ||
+                        descNorm.includes('PAGAMENTO FATURA') ||
+                        descNorm.includes('APLICACAO AUTOMATICA') ||
+                        descNorm.includes('RESGATE AUTOMATICO')
+                    ) {
+                        ehPropria = true;
+                        motivoPropria = 'Liquidação de fatura / movimentação interna';
+                    }
+                    // 2. Categoria oficial da Pluggy para transferência de mesma titularidade ("Same person transfer")
+                    else if (
+                        catNorm.includes('SAME PERSON TRANSFER') ||
+                        catNorm.includes('TRANSFER - INTERNAL') ||
+                        catId.startsWith('04')
+                    ) {
+                        ehPropria = true;
+                        motivoPropria = 'Mesma titularidade (Open Finance)';
+                    }
+                    // 3. Mesmo CPF no pagador e recebedor ou CPF da contraparte pertence ao próprio usuário
+                    else if (
+                        (docPagador && docRecebedor && docPagador === docRecebedor) ||
+                        (docContraparte && cpfsTitularSet.has(docContraparte))
+                    ) {
+                        ehPropria = true;
+                        motivoPropria = 'Mesmo CPF do titular';
+                    }
+                    // 4. Número da conta da contraparte é uma das contas do próprio usuário
+                    else if (contaContraparte && contasTitularSet.has(contaContraparte)) {
+                        ehPropria = true;
+                        motivoPropria = 'Conta própria vinculada';
+                    }
+                    // 5. Nome da contraparte (ou nome citado na descrição de transferência/PIX) é do próprio titular
+                    else if (
+                        nomeCorrespondeAoTitular(nomeContraparte, nomesTitularSet) ||
+                        [...nomesTitularSet].some((nomeTit) => nomeTit.length >= 6 && descNorm.includes(nomeTit)) ||
+                        [...cpfsTitularSet].some((cpf) => cpf.length === 11 && apenasDigitos(t.description).includes(cpf))
+                    ) {
+                        ehPropria = true;
+                        motivoPropria = 'Mesmo titular identificado';
+                    }
+
+                    t.ehMovimentacaoPropria = ehPropria;
+                    t.motivoPropria = motivoPropria;
+                    // Identifica se tem terceiro explícito (CPF/CNPJ diferente do titular ou estabelecimento comercial)
+                    t.temTerceiroConfirmado =
+                        !ehPropria &&
+                        Boolean(
+                            (docContraparte && !cpfsTitularSet.has(docContraparte)) ||
+                                t.merchantName ||
+                                t.contaTipo === 'CREDIT'
+                        );
+                });
+
+                // 2ª Passada: pareamento espelhado (saída em uma conta bancária + entrada de mesmo valor em outra conta conectada no mesmo dia/janela de 24h)
+                const candidatasEspelho = transacoes.filter(
+                    (t) => t.contaTipo === 'BANK' && !t.ehMovimentacaoPropria && !t.temTerceiroConfirmado
+                );
+                const usadasNoEspelho = new Set();
+
+                for (let i = 0; i < candidatasEspelho.length; i++) {
+                    const t1 = candidatasEspelho[i];
+                    if (usadasNoEspelho.has(t1.id)) continue;
+
+                    const val1 = Math.abs(Number(t1.amount) || 0);
+                    const tempo1 = new Date(t1.date).getTime();
+
+                    for (let j = i + 1; j < candidatasEspelho.length; j++) {
+                        const t2 = candidatasEspelho[j];
+                        if (usadasNoEspelho.has(t2.id)) continue;
+                        if (t1.type === t2.type) continue;
+                        if (t1.contaId === t2.contaId) continue;
+
+                        const val2 = Math.abs(Number(t2.amount) || 0);
+                        const tempo2 = new Date(t2.date).getTime();
+                        const diffHoras = Math.abs(tempo1 - tempo2) / (1000 * 60 * 60);
+
+                        if (Math.abs(val1 - val2) < 0.01 && diffHoras <= 30) {
+                            t1.ehMovimentacaoPropria = true;
+                            t1.motivoPropria = `Transferência entre suas contas (${t1.bancoNome} ↔ ${t2.bancoNome})`;
+                            t2.ehMovimentacaoPropria = true;
+                            t2.motivoPropria = `Transferência entre suas contas (${t2.bancoNome} ↔ ${t1.bancoNome})`;
+                            usadasNoEspelho.add(t1.id);
+                            usadasNoEspelho.add(t2.id);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            function renderizarTabelaTransacoes() {
+                contadorTransacoesAba.textContent = todasTransacoes.length;
+
+                if (todasTransacoes.length === 0) {
+                    resumoTransacoesEl.style.display = 'none';
+                    containerTabelaTransacoes.innerHTML =
+                        '<p class="texto-suave">Nenhuma transação carregada. Clique em "Atualizar Transações".</p>';
+                    return;
+                }
+
+                const termo = (filtroBusca.value || '').trim().toLowerCase();
+                const bancoSel = filtroBanco.value;
+                const tipoContaSel = filtroTipoConta.value;
+                const mesSel = filtroMes.value;
+                const titularidadeSel = filtroTitularidade.value;
+
+                const filtradas = todasTransacoes.filter((t) => {
+                    if (bancoSel !== 'TODOS' && t.itemId !== bancoSel) return false;
+                    if (tipoContaSel !== 'TODOS' && t.contaTipo !== tipoContaSel) return false;
+                    if (mesSel !== 'TODOS' && t.mesAnoChave !== mesSel) return false;
+                    if (titularidadeSel === 'TERCEIROS' && t.ehMovimentacaoPropria) return false;
+                    if (titularidadeSel === 'PROPRIAS' && !t.ehMovimentacaoPropria) return false;
+                    if (termo) {
+                        const alvo = `${t.description || ''} ${t.category || ''} ${t.contraparteNome || ''} ${t.contaNome || ''} ${t.bancoNome || ''}`.toLowerCase();
+                        if (!alvo.includes(termo)) return false;
+                    }
+                    return true;
+                });
+
+                let decrescimosTerceiros = 0;
+                let acrescimosTerceiros = 0;
+                let qtdPropriasIgnoradas = 0;
+
+                // REGRA: só soma ou subtrai se tiver conta terceira como parte (!t.ehMovimentacaoPropria)
+                filtradas.forEach((t) => {
+                    if (t.ehMovimentacaoPropria) {
+                        qtdPropriasIgnoradas++;
+                        return;
+                    }
+                    const valorAbs = Math.abs(Number(t.amount) || 0);
+                    if (t.type === 'DEBIT') {
+                        decrescimosTerceiros += valorAbs;
+                    } else {
+                        acrescimosTerceiros += valorAbs;
+                    }
+                });
+
+                resumoTransacoesEl.style.display = 'flex';
+                resumoTransacoesEl.innerHTML = `
+                    <div class="resumo-item">
+                        <small>Transações Exibidas (${qtdPropriasIgnoradas} próprias neutras)</small>
+                        <strong class="saldo" style="color: #24292f;">${filtradas.length}</strong>
+                    </div>
+                    <div class="resumo-item">
+                        <small>Decréscimos (Para Terceiros)</small>
+                        <strong class="saldo credito">- ${formatarMoeda(decrescimosTerceiros)}</strong>
+                    </div>
+                    <div class="resumo-item">
+                        <small>Acréscimos (De Terceiros)</small>
+                        <strong class="saldo">+ ${formatarMoeda(acrescimosTerceiros)}</strong>
+                    </div>
+                `;
+
+                if (filtradas.length === 0) {
+                    containerTabelaTransacoes.innerHTML =
+                        '<p class="texto-suave">Nenhuma transação encontrada para os filtros selecionados.</p>';
+                    return;
+                }
+
+                const linhasHtml = filtradas
+                    .map((t) => {
+                        const dataObj = new Date(t.date);
+                        const dataFormatada = dataObj.toLocaleDateString('pt-BR');
+                        const horaFormatada = dataObj.toLocaleTimeString('pt-BR', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+
+                        const isDebit = t.type === 'DEBIT';
+                        const valorAbs = Math.abs(Number(t.amount) || 0);
+
+                        let sinal = isDebit ? '-' : '+';
+                        let classeValor = isDebit ? 'valor-debito' : 'valor-credito';
+                        let subtextoValor = '';
+
+                        if (t.ehMovimentacaoPropria) {
+                            sinal = '';
+                            classeValor = 'valor-neutro';
+                            subtextoValor = '<small class="nota-neutra">Não soma/subtrai</small>';
+                        }
+
+                        const badgeParcela = t.parcelaInfo
+                            ? `<span class="badge-tag parcela">Parcela ${t.parcelaInfo}</span>`
+                            : '';
+                        const badgePendente =
+                            t.status === 'PENDING'
+                                ? `<span class="badge-tag pendente">Pendente</span>`
+                                : '';
+                        const badgeTitularidade = t.ehMovimentacaoPropria
+                            ? `<span class="badge-tag propria" title="${t.motivoPropria || 'Movimentação entre contas próprias'}">Entre Contas Próprias</span>`
+                            : `<span class="badge-tag terceiro">Conta Terceira</span>`;
+                        const badgeOrigem =
+                            t.contaTipo === 'CREDIT'
+                                ? `<span class="badge-tag origem-cartao">Cartão</span>`
+                                : `<span class="badge-tag origem-conta">Conta</span>`;
+
+                        return `
+                            <tr class="${t.ehMovimentacaoPropria ? 'linha-propria' : ''}">
+                                <td class="col-data">
+                                    <strong>${dataFormatada}</strong>
+                                    <small>${horaFormatada}</small>
+                                </td>
+                                <td class="col-descricao">
+                                    <div class="desc-principal">
+                                        <strong>${t.description}</strong>
+                                        ${badgeTitularidade}
+                                        ${badgeParcela}
+                                        ${badgePendente}
+                                    </div>
+                                    ${t.contraparteNome ? `<small class="texto-suave">Contraparte: ${t.contraparteNome} ${t.contraparteDoc ? `(${t.contraparteDoc})` : ''}</small>` : ''}
+                                    ${t.ehMovimentacaoPropria && t.motivoPropria ? `<small class="texto-suave">Motivo: ${t.motivoPropria}</small>` : ''}
+                                </td>
+                                <td>
+                                    <span class="categoria-texto">${t.category || t.operationType || '-'}</span>
+                                </td>
+                                <td>
+                                    <div class="origem-celula">
+                                        ${badgeOrigem}
+                                        <div>
+                                            <strong>${t.bancoNome}</strong>
+                                            <small class="texto-suave">${t.contaNome}</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="col-valor ${classeValor}">
+                                    ${sinal} ${formatarMoeda(valorAbs)}
+                                    ${subtextoValor}
+                                </td>
+                            </tr>
+                        `;
+                    })
+                    .join('');
+
+                containerTabelaTransacoes.innerHTML = `
+                    <table class="tabela-transacoes">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Descrição / Contraparte</th>
+                                <th>Categoria</th>
+                                <th>Banco / Origem</th>
+                                <th style="text-align: right;">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${linhasHtml}
+                        </tbody>
+                    </table>
+                `;
+            }
+
+            [filtroBusca, filtroBanco, filtroTipoConta, filtroMes, filtroTitularidade].forEach((el) => {
+                el.addEventListener('input', renderizarTabelaTransacoes);
+                el.addEventListener('change', renderizarTabelaTransacoes);
+            });
+
+            async function buscarContasDeTodosOsBancos() {
+                if (bancosConectados.length === 0) {
+                    alert('Vincule pelo menos um banco primeiro!');
+                    return;
+                }
+
+                listaSaldos.innerHTML = '<p>Carregando contas de todos os bancos...</p>';
+                containerTabelaTransacoes.innerHTML = '<p>Carregando transações de todos os bancos...</p>';
+                resumoGeralEl.style.display = 'none';
+
+                const respostas = await Promise.all(
+                    bancosConectados.map(async (banco, idx) => {
+                        try {
+                            const res = await fetch(`/api/accounts/${banco.id}`);
+                            const dados = await res.json();
+                            return { banco, idx, ok: res.ok, dados };
+                        } catch (erro) {
+                            return { banco, idx, ok: false, dados: { erro: erro.message } };
+                        }
+                    })
+                );
+
+                saidaJson.textContent = JSON.stringify(
+                    respostas.map((r) => ({ itemId: r.banco.id, banco: r.banco.nome, resposta: r.dados })),
+                    null,
+                    2
+                );
+
+                listaSaldos.innerHTML = '';
+                let somaContasBancarias = 0;
+                let somaFaturasMes = 0;
+                let alterouMetadadosBanco = false;
+                const transacoesColetadas = [];
+                const cpfsTitularSet = new Set();
+                const nomesTitularSet = new Set();
+                const contasTitularSet = new Set();
+
+                respostas.forEach(({ banco, idx, ok, dados }) => {
+                    const nomeFixo = nomePadraoSlot(
+                        typeof banco.slotIndex === 'number' ? banco.slotIndex : idx
+                    );
+                    if (banco.nome !== nomeFixo) {
+                        banco.nome = nomeFixo;
+                        alterouMetadadosBanco = true;
+                    }
+
+                    const connector = dados?.item?.connector;
+                    if (connector && connector.imageUrl && banco.logo !== connector.imageUrl) {
+                        banco.logo = connector.imageUrl;
+                        alterouMetadadosBanco = true;
+                    }
+
+                    const secaoBanco = document.createElement('div');
+                    secaoBanco.className = 'secao-banco';
+
+                    const tituloBanco = document.createElement('div');
+                    tituloBanco.className = 'secao-banco-header';
+                    tituloBanco.innerHTML = `
+                        <div class="slot-info">
+                            ${banco.logo ? `<img src="${banco.logo}" alt="${banco.nome}" class="banco-logo" />` : `<div class="banco-avatar">${idx + 1}</div>`}
+                            <div>
+                                <h4>${banco.nome}</h4>
+                                <small class="texto-suave">Item ID: ${banco.id}</small>
+                            </div>
+                        </div>
+                    `;
+                    secaoBanco.appendChild(tituloBanco);
+
+                    if (!ok || !Array.isArray(dados.results)) {
+                        const erroP = document.createElement('p');
+                        erroP.className = 'erro-msg';
+                        erroP.textContent = `Erro ao buscar contas deste banco (${dados?.erro || 'Verifique o JSON bruto'}).`;
+                        secaoBanco.appendChild(erroP);
+                        listaSaldos.appendChild(secaoBanco);
+                        return;
+                    }
+
+                    const grid = document.createElement('div');
+                    grid.className = 'cards-grid';
+
+                    dados.results.forEach((conta) => {
+                        if (conta.taxNumber) {
+                            const cpfLimpo = apenasDigitos(conta.taxNumber);
+                            if (cpfLimpo) cpfsTitularSet.add(cpfLimpo);
+                        }
+                        if (conta.owner) {
+                            const nomeLimpo = normalizarTexto(conta.owner);
+                            if (nomeLimpo) nomesTitularSet.add(nomeLimpo);
+                        }
+                        if (conta.number) {
+                            const numLimpo = apenasDigitos(conta.number);
+                            if (numLimpo) contasTitularSet.add(numLimpo);
+                        }
+
+                        if (conta.type === 'CREDIT') {
+                            const valorFaturaMes = conta.faturaDetalhada
+                                ? conta.faturaDetalhada.faturaAberta.total
+                                : Number(conta.balance) || 0;
+                            somaFaturasMes += valorFaturaMes;
+                        } else {
+                            somaContasBancarias += Number(conta.balance) || 0;
+                        }
+
+                        grid.appendChild(criarCardConta(conta));
+
+                        if (Array.isArray(conta.transacoes)) {
+                            conta.transacoes.forEach((t) => {
+                                const numParc = t.creditCardMetadata?.installmentNumber;
+                                const totParc = t.creditCardMetadata?.totalInstallments;
+                                const descLower = (t.description || '').toLowerCase();
+                                const ehPagamentoFatura =
+                                    conta.type === 'CREDIT' &&
+                                    t.type === 'CREDIT' &&
+                                    (descLower.includes('fatura') || t.categoryId === '05100000');
+
+                                transacoesColetadas.push({
+                                    id: t.id,
+                                    date: t.date,
+                                    mesAnoChave: (t.date || '').slice(0, 7),
+                                    description: t.description,
+                                    amount: t.amount,
+                                    type: t.type,
+                                    status: t.status,
+                                    category: t.category,
+                                    categoryId: t.categoryId,
+                                    operationType: t.operationType,
+                                    paymentData: t.paymentData || null,
+                                    merchantName: t.merchant?.businessName || t.merchant?.name || '',
+                                    parcelaInfo:
+                                        numParc && totParc && totParc > 1 ? `${numParc}/${totParc}` : null,
+                                    ehPagamentoFatura,
+                                    itemId: banco.id,
+                                    bancoNome: banco.nome,
+                                    contaId: conta.id,
+                                    contaNome: conta.name,
+                                    contaTipo: conta.type
+                                });
+                            });
+                        }
+                    });
+
+                    secaoBanco.appendChild(grid);
+                    listaSaldos.appendChild(secaoBanco);
+                });
+
+                if (alterouMetadadosBanco) {
+                    salvarBancos();
+                }
+
+                classificarMovimentacoesProprias(
+                    transacoesColetadas,
+                    cpfsTitularSet,
+                    nomesTitularSet,
+                    contasTitularSet
+                );
+
+                todasTransacoes = transacoesColetadas.sort(
+                    (a, b) => new Date(b.date) - new Date(a.date)
+                );
+                dadosJaCarregados = true;
+
+                atualizarOpcoesFiltrosTransacoes();
+                renderizarTabelaTransacoes();
+
+                resumoGeralEl.style.display = 'flex';
+                resumoGeralEl.innerHTML = `
+                    <div class="resumo-item">
+                        <small>Saldo Total em Contas (${bancosConectados.length} ${bancosConectados.length === 1 ? 'banco' : 'bancos'})</small>
+                        <strong class="saldo">${formatarMoeda(somaContasBancarias)}</strong>
+                    </div>
+                    <div class="resumo-item">
+                        <small>Total das Faturas do Mês (Cartões)</small>
+                        <strong class="saldo credito">${formatarMoeda(somaFaturasMes)}</strong>
+                    </div>
+                `;
+            }
+
+            document.getElementById('btn-buscar-contas').addEventListener('click', buscarContasDeTodosOsBancos);
+            document.getElementById('btn-atualizar-transacoes').addEventListener('click', buscarContasDeTodosOsBancos);
+
+            renderizarSlotsBancos();
         </script>
     </body>
 </html>

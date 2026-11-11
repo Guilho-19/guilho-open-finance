@@ -150,33 +150,61 @@ app.get('/api/accounts/:itemId', async (req, res) => {
         const apiKey = await gerarApiKey();
         const { itemId } = req.params;
 
-        const response = await fetch(`https://api.pluggy.ai/accounts?itemId=${itemId}`, {
-            headers: { 'X-API-KEY': apiKey }
-        });
+        const [response, itemRes] = await Promise.all([
+            fetch(`https://api.pluggy.ai/accounts?itemId=${itemId}`, {
+                headers: { 'X-API-KEY': apiKey }
+            }),
+            fetch(`https://api.pluggy.ai/items/${itemId}`, {
+                headers: { 'X-API-KEY': apiKey }
+            })
+        ]);
+
         const data = await response.json();
+        if (itemRes.ok) {
+            const itemInfo = await itemRes.json();
+            data.item = {
+                id: itemInfo.id,
+                status: itemInfo.status,
+                connector: itemInfo.connector
+                    ? {
+                          id: itemInfo.connector.id,
+                          name: itemInfo.connector.name,
+                          imageUrl: itemInfo.connector.imageUrl,
+                          primaryColor: itemInfo.connector.primaryColor
+                      }
+                    : null
+            };
+        }
 
         if (Array.isArray(data.results)) {
             await Promise.all(
                 data.results.map(async (conta) => {
-                    if (conta.type !== 'CREDIT') return;
-
-                    const [billsRes, txRes] = await Promise.all([
-                        fetch(`https://api.pluggy.ai/bills?accountId=${conta.id}`, {
-                            headers: { 'X-API-KEY': apiKey }
-                        }),
-                        fetch(`https://api.pluggy.ai/v2/transactions?accountId=${conta.id}`, {
-                            headers: { 'X-API-KEY': apiKey }
-                        })
-                    ]);
-
-                    const billsData = billsRes.ok ? await billsRes.json() : { results: [] };
-                    const txData = txRes.ok ? await txRes.json() : { results: [] };
-
-                    conta.faturaDetalhada = calcularFaturaCartao(
-                        conta,
-                        billsData.results || [],
-                        txData.results || []
+                    const txPromise = fetch(
+                        `https://api.pluggy.ai/v2/transactions?accountId=${conta.id}`,
+                        { headers: { 'X-API-KEY': apiKey } }
                     );
+                    const billsPromise =
+                        conta.type === 'CREDIT'
+                            ? fetch(`https://api.pluggy.ai/bills?accountId=${conta.id}`, {
+                                  headers: { 'X-API-KEY': apiKey }
+                              })
+                            : Promise.resolve(null);
+
+                    const [txRes, billsRes] = await Promise.all([txPromise, billsPromise]);
+                    const txData = txRes && txRes.ok ? await txRes.json() : { results: [] };
+                    const txResults = txData.results || [];
+
+                    conta.transacoes = txResults;
+
+                    if (conta.type === 'CREDIT') {
+                        const billsData =
+                            billsRes && billsRes.ok ? await billsRes.json() : { results: [] };
+                        conta.faturaDetalhada = calcularFaturaCartao(
+                            conta,
+                            billsData.results || [],
+                            txResults
+                        );
+                    }
                 })
             );
         }
