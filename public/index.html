@@ -19,8 +19,8 @@
             <h3>2. Saldo das Contas</h3>
             <button id="btn-buscar-contas">Buscar Contas deste Item</button>
             <div id="lista-saldos" class="cards-grid"></div>
-            <details style="margin-top: 20px;">
-                <summary style="cursor: pointer; color: #555;">Ver JSON bruto retornado pela API</summary>
+            <details class="json-detalhes">
+                <summary>Ver JSON bruto retornado pela API</summary>
                 <pre id="saida-json">Os dados aparecerão aqui...</pre>
             </details>
         </div>
@@ -67,25 +67,97 @@
                     return;
                 }
                 listaSaldos.innerHTML = 'Carregando...';
-                const res = await fetch(`/api/accounts/${itemIDAtual}`);
+                const res = await fetch(`/api/accounts/${itemIdAtual}`);
                 const dados = await res.json();
                 saidaJson.textContent = JSON.stringify(dados, null, 2);
 
                 listaSaldos.innerHTML = '';
 
+                if (!res.ok || !Array.isArray(dados.results)) {
+                    listaSaldos.textContent = 'Erro ao buscar contas. Verifique o JSON bruto para detalhes.';
+                    return;
+                }
+
                 dados.results.forEach((conta) => {
                     const isCard = conta.type === 'CREDIT';
-                    const tipoLegivel = isCard ? 'Cartão de Crédito (Fatura)' : 'Conta Bancária (Saldo)';
+                    const tipoLegivel = isCard ? 'Cartão de Crédito (Fatura do Mês)' : 'Conta Bancária (Saldo)';
                     
                     const card = document.createElement('div');
-                    card.className = 'card-conta';
-                    card.innerHTML = `
-                        <small>${tipoLegivel}</small>
-                        <h4>${conta.name}</h4>
-                        <p class="saldo ${isCard ? 'credito' : ''}">
-                            ${formatarMoeda(conta.balance)}
-                        </p>
-                    `;
+                    card.className = `card-conta ${isCard ? 'card-credito' : ''}`;
+
+                    if (isCard && conta.faturaDetalhada) {
+                        const f = conta.faturaDetalhada;
+                        const faturaFechada = f.faturaFechadaMesVigente;
+                        const dataVencFechada = faturaFechada?.dueDate
+                            ? new Date(faturaFechada.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+                            : '-';
+
+                        const itensCicloHtml = [
+                            ...f.faturaAberta.lancamentosRecentes.map((item) => `
+                                <li>
+                                    <span>${item.description} <small>(${new Date(item.date).toLocaleDateString('pt-BR')})</small></span>
+                                    <strong>${formatarMoeda(item.amount)}</strong>
+                                </li>
+                            `),
+                            ...f.faturaAberta.parcelasAtivas.map((parc) => `
+                                <li>
+                                    <span>${parc.description} <small>(Parcela ${parc.parcelaAtual})</small></span>
+                                    <strong>${formatarMoeda(parc.amount)}</strong>
+                                </li>
+                            `)
+                        ].join('');
+
+                        card.innerHTML = `
+                            <small>${tipoLegivel} • Ref. ${f.mesReferencia}</small>
+                            <h4>${conta.name}</h4>
+                            <p class="saldo credito">
+                                ${formatarMoeda(f.faturaAberta.total)}
+                            </p>
+                            <div class="detalhes-fatura">
+                                <div class="linha-fatura">
+                                    <span>Compras no ciclo aberto:</span>
+                                    <strong>${formatarMoeda(f.faturaAberta.comprasAvulsasCiclo)}</strong>
+                                </div>
+                                <div class="linha-fatura">
+                                    <span>Parcelas deste mês:</span>
+                                    <strong>${formatarMoeda(f.faturaAberta.parcelasDoMes)}</strong>
+                                </div>
+                                ${faturaFechada ? `
+                                <div class="linha-fatura separador">
+                                    <span>Fatura fechada (venc. ${dataVencFechada}):</span>
+                                    <strong>
+                                        ${formatarMoeda(faturaFechada.totalAmount)}
+                                        <span class="badge-status ${faturaFechada.paga ? 'paga' : 'aberta'}">
+                                            ${faturaFechada.paga ? 'Paga' : 'Em aberto'}
+                                        </span>
+                                    </strong>
+                                </div>
+                                ` : ''}
+                                <div class="linha-fatura">
+                                    <span>Parcelas de meses futuros:</span>
+                                    <strong>${formatarMoeda(f.parcelasMesesFuturos)}</strong>
+                                </div>
+                                <div class="linha-fatura texto-secundario">
+                                    <span>Limite total utilizado (soma geral):</span>
+                                    <strong>${formatarMoeda(f.limiteUtilizadoTotal)}</strong>
+                                </div>
+                            </div>
+                            <details class="lancamentos-fatura">
+                                <summary>Ver itens da fatura atual (${f.faturaAberta.lancamentosRecentes.length + f.faturaAberta.parcelasAtivas.length})</summary>
+                                <ul class="lista-lancamentos">
+                                    ${itensCicloHtml || '<li>Nenhum lançamento no ciclo atual.</li>'}
+                                </ul>
+                            </details>
+                        `;
+                    } else {
+                        card.innerHTML = `
+                            <small>${tipoLegivel}</small>
+                            <h4>${conta.name}</h4>
+                            <p class="saldo ${isCard ? 'credito' : ''}">
+                                ${formatarMoeda(conta.balance)}
+                            </p>
+                        `;
+                    }
 
                     listaSaldos.appendChild(card);
                 });
