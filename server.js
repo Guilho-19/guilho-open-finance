@@ -18,3 +18,40 @@ async function gerarApiKey() {
     return data.apiKey;
 }
 
+app.post('/api/connect-token', async(re,res) => {
+    try {
+        const apiKey = await gerarApiKey();
+        const response = await fetch('https://api.pluggy.ai/connect_token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-KEY': apiKey
+            },
+            body: JSON.stringify({})
+        }),
+        const data = await response.json();
+        res.json({ accessToken: data.accessToken });
+    } catch (erro) {
+        res.status(500).json({ erro: erro.nessage });
+    }
+});
+
+app.get('/api/accounts/:itemId', async (req, res) => {
+    try {
+        const apiKey = await gerarApiKey();
+        const { itemId } = req.params;
+
+        const response = await fetch('https://api.pluggy,ai/accounts?itemId=${itemId}', {
+            headers: { 'X-API-KEY': apiKey }
+        });
+        const data = await response.json();
+        res.json(data);
+    } catch (erro) {
+        res.status(500).json({ erro: erro.message });
+    }
+});
+
+app.listen(3000, () => {
+    console.log('Servidor rodando em http://localhost:3000');
+});
+
