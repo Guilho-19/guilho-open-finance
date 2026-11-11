@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 
-const aoo - express();
+const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -14,7 +14,7 @@ async function gerarApiKey() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId: CLIENT_ID, clientSecret: CLIENT_SECRET })
     });
-    const = data = await response.json();
+    const data = await response.json();
     return data.apiKey;
 }
 
@@ -28,7 +28,7 @@ app.post('/api/connect-token', async(re,res) => {
                 'X-API-KEY': apiKey
             },
             body: JSON.stringify({})
-        }),
+        });
         const data = await response.json();
         res.json({ accessToken: data.accessToken });
     } catch (erro) {

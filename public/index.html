@@ -3,9 +3,67 @@
     <head>
         <meta charset="UTF-8">
         <script src="https://cdn.pluggy.ai/pluggy-connect/latest/pluggy-connect.js"></script>
+        <style>
+            body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+            button { padding: 10px 16px; cursor: pointer; margin-right: 10px; }
+            pre { background: #f4f4f4; padding: 15px; border-radius: 6px; overflow-x: auto; }
+            .box { border: 1px solid #ddd; padding: 16px; border-radius: 6px; margin-top: 20px; }
+        </style>
     </head>
 
     <body>
+        <h1>Meu Dashboard Financeiro</h1>
 
+        <div class="box">
+            <h3>1. Conexão</h3>
+            <button id="btn-conectar">Vincular MeuPluggy</button>
+            <p´><strong>Item ID atual:</strong> <span id="item-id-display">Nenhum</span></p>
+        </div>
+
+        <div class="box">
+            <h3>2. Dados Brutos das Contas</h3>
+            <button id="btnc-buscar-contas">Buscar Contas deste Item</button>
+            <pre id="saida-json">Os dados aparecerão aqui...</pre>
+        </div>
+
+        <script>
+            const itemDisplay = document.getElementById('item-id-display');
+            const saidaJson = document.getElementById('saida-json');
+
+            let itemIdAtual = localStorage.getItem('meu_pluggy_item_id');
+            if (itemIdAtual) {
+                itemDisplay.textContent = itemIdAtual;
+            }
+
+            document.getElementById('btn-conectar').addEventListener('click', async () => {
+                const res = await fetch('/api/connect-token', { method: 'POST' });
+                const { accessToken } = await res.json();
+                const pluggyConnect = new PluggyConnect({
+                    connectToken: accessToken,
+                    onSuccess: (itemData) => {
+                        itemIdAtual = itemData.item.id;
+                        localStorage.setItem('meu_pluggy_item_id', itemIdAtual);
+                        itemDisplay.textContent = itemIdAtual;
+                        saidaJson.textContent = JSON.stringify(itemData, null, 2);
+                    },
+                    onError: (erro) => {
+                        console.error('Erro na conexão: ', erro);
+                    }
+                });
+
+                pluggyConnect.init();
+            });
+
+            document.getElementById('btn-buscar-contas').addEventListener('click', async () => {
+                if (!itemIdAtual) {
+                    alert('Vincule o MeuPluggy primeiro para ter um Item ID!');
+                    return;
+                }
+                saidaJson.textContent = 'Carregando constas...';
+                const res = await fetch('/api/accounts/${itemIDAtual}');
+                const dados = await res.json();
+                saidaJson.textContent = JSON.stringify(dados, null, 2);
+            });
+        </script>
     </body>
 </html>
