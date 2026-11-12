@@ -10,13 +10,52 @@
         <h1>Meu Dashboard Financeiro</h1>
 
         <nav class="abas-nav">
-            <button class="aba-btn ativa" data-aba="aba-visao-geral">Visão Geral e Saldos</button>
+            <button class="aba-btn ativa" data-aba="aba-controle-mensal">
+                Controle Mensal (Fatura + Dinheiro)
+            </button>
+            <button class="aba-btn" data-aba="aba-visao-geral">Meus Bancos e Saldos</button>
             <button class="aba-btn" data-aba="aba-transacoes">
                 Todas as Transações <span id="contador-transacoes-aba" class="badge-aba">0</span>
             </button>
         </nav>
 
-        <div id="aba-visao-geral" class="aba-conteudo ativa">
+        <div id="aba-controle-mensal" class="aba-conteudo ativa">
+            <div class="box dashboard-mensal-box">
+                <div class="cabecalho-dashboard-mensal">
+                    <div>
+                        <span class="subtitulo-topo">PLANEJAMENTO POR COMPETÊNCIA</span>
+                        <h3>Controle Mensal: Fatura dos Cartões + Movimentações em Dinheiro</h3>
+                        <p id="descricao-competencia-mensal" class="texto-suave">
+                            Consolida a fatura de gastos dos cartões no mês (paga no início do mês seguinte) + entradas e saídas em dinheiro durante o mês.
+                        </p>
+                    </div>
+                    <div class="controles-periodo-mensal">
+                        <div class="campo-controle">
+                            <label for="controle-mes-select">Mês de Competência</label>
+                            <select id="controle-mes-select">
+                                <option value="2026-11">Novembro/2026 (Fatura venc. início Dez)</option>
+                            </select>
+                        </div>
+                        <div class="campo-controle">
+                            <label for="controle-banco-select">Instituição</label>
+                            <select id="controle-banco-select">
+                                <option value="TODOS">Todos os bancos (XP, Itau, Nubank)</option>
+                                <option value="XP">XP</option>
+                                <option value="Itau">Itau</option>
+                                <option value="Nubank">Nubank</option>
+                            </select>
+                        </div>
+                        <button id="btn-atualizar-controle" class="btn-primario">Atualizar Dados</button>
+                    </div>
+                </div>
+
+                <div id="conteudo-controle-mensal">
+                    <p class="texto-suave">Carregando dados ou aguardando conexão com os bancos...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="aba-visao-geral" class="aba-conteudo">
             <div class="box">
                 <div class="cabecalho-secao">
                     <h3>1. Meus Bancos</h3>
@@ -110,12 +149,47 @@
             const resumoTransacoesEl = document.getElementById('resumo-transacoes');
             const containerTabelaTransacoes = document.getElementById('container-tabela-transacoes');
 
+            const controleMesSelect = document.getElementById('controle-mes-select');
+            const controleBancoSelect = document.getElementById('controle-banco-select');
+            const descricaoCompetenciaMensal = document.getElementById('descricao-competencia-mensal');
+            const conteudoControleMensal = document.getElementById('conteudo-controle-mensal');
+
             const META_BANCOS = 3;
             const NOMES_BANCOS_PADRAO = ['XP', 'Itau', 'Nubank'];
+            const NOMES_MESES_PT = [
+                'Janeiro',
+                'Fevereiro',
+                'Março',
+                'Abril',
+                'Maio',
+                'Junho',
+                'Julho',
+                'Agosto',
+                'Setembro',
+                'Outubro',
+                'Novembro',
+                'Dezembro'
+            ];
             const STORAGE_KEY = 'meu_pluggy_bancos';
 
             let todasTransacoes = [];
+            let todosCartoesCredito = [];
+            let todasContasBancarias = [];
             let dadosJaCarregados = false;
+
+            function formatarMesExtenso(chaveAnoMes) {
+                const [anoStr, mesStr] = String(chaveAnoMes || '').split('-');
+                const idx = Number(mesStr) - 1;
+                if (!anoStr || idx < 0 || idx > 11) return chaveAnoMes;
+                return `${NOMES_MESES_PT[idx]}/${anoStr}`;
+            }
+
+            function obterMesSeguinteExtenso(chaveAnoMes) {
+                const [anoStr, mesStr] = String(chaveAnoMes || '').split('-');
+                const d = new Date(Date.UTC(Number(anoStr), Number(mesStr) - 1 + 1, 1));
+                if (Number.isNaN(d.getTime())) return '';
+                return `${NOMES_MESES_PT[d.getUTCMonth()]}/${d.getUTCFullYear()}`;
+            }
 
             // Controle de Abas
             document.querySelectorAll('.aba-btn').forEach((btn) => {
@@ -127,7 +201,7 @@
                     const idAba = btn.dataset.aba;
                     document.getElementById(idAba).classList.add('ativa');
 
-                    if (idAba === 'aba-transacoes' && !dadosJaCarregados && bancosConectados.length > 0) {
+                    if (!dadosJaCarregados && bancosConectados.length > 0) {
                         buscarContasDeTodosOsBancos();
                     }
                 });
@@ -422,12 +496,12 @@
                 const valorBancoAtual = filtroBanco.value;
                 const valorMesAtual = filtroMes.value;
 
-                // Bancos únicos presentes nas transações (ou conectados)
+                // Bancos únicos (XP, Itau, Nubank)
                 filtroBanco.innerHTML = '<option value="TODOS">Todos os bancos</option>';
-                bancosConectados.forEach((b) => {
+                NOMES_BANCOS_PADRAO.forEach((nomeBanco) => {
                     const opt = document.createElement('option');
-                    opt.value = b.id;
-                    opt.textContent = b.nome;
+                    opt.value = nomeBanco;
+                    opt.textContent = nomeBanco;
                     filtroBanco.appendChild(opt);
                 });
                 if ([...filtroBanco.options].some((o) => o.value === valorBancoAtual)) {
@@ -511,7 +585,7 @@
                     let ehPropria = false;
                     let motivoPropria = '';
 
-                    // 1. Pagamento da própria fatura de cartão ou aplicação/resgate automático interno
+                    // 1. Pagamento da própria fatura de cartão, transferência Conta Digital <-> Conta Investimento (XP) ou aplicação/resgate interno
                     if (
                         t.ehPagamentoFatura ||
                         catId === '05100000' ||
@@ -519,11 +593,24 @@
                         descNorm.includes('PGTO FATURA') ||
                         descNorm.includes('PAGAMENTO DE FATURA') ||
                         descNorm.includes('PAGAMENTO FATURA') ||
+                        descNorm.includes('CONTA DIGITAL') ||
+                        descNorm.includes('CONTA INVESTIMENTO') ||
+                        descNorm.includes('CONTA DE INVESTIMENTO') ||
+                        descNorm.includes('TRANSFERENCIA INTERNA') ||
+                        descNorm.includes('MESMA TITULARIDADE') ||
+                        descNorm.includes('ENTRE CONTAS PROPRIAS') ||
                         descNorm.includes('APLICACAO AUTOMATICA') ||
-                        descNorm.includes('RESGATE AUTOMATICO')
+                        descNorm.includes('RESGATE AUTOMATICO') ||
+                        descNorm.includes('DINHEIRO GUARDADO') ||
+                        descNorm.includes('GUARDAR DINHEIRO') ||
+                        descNorm.includes('APLICACAO RDB') ||
+                        descNorm.includes('RESGATE RDB')
                     ) {
                         ehPropria = true;
-                        motivoPropria = 'Liquidação de fatura / movimentação interna';
+                        motivoPropria =
+                            descNorm.includes('CONTA DIGITAL') || descNorm.includes('CONTA INVESTIMENTO')
+                                ? 'Movimentação entre Conta Corrente e Conta Investimento (XP)'
+                                : 'Liquidação de fatura / movimentação interna';
                     }
                     // 2. Categoria oficial da Pluggy para transferência de mesma titularidade ("Same person transfer")
                     else if (
@@ -622,7 +709,7 @@
                 const titularidadeSel = filtroTitularidade.value;
 
                 const filtradas = todasTransacoes.filter((t) => {
-                    if (bancoSel !== 'TODOS' && t.itemId !== bancoSel) return false;
+                    if (bancoSel !== 'TODOS' && t.bancoNome !== bancoSel) return false;
                     if (tipoContaSel !== 'TODOS' && t.contaTipo !== tipoContaSel) return false;
                     if (mesSel !== 'TODOS' && t.mesAnoChave !== mesSel) return false;
                     if (titularidadeSel === 'TERCEIROS' && t.ehMovimentacaoPropria) return false;
@@ -771,14 +858,452 @@
                 el.addEventListener('change', renderizarTabelaTransacoes);
             });
 
+            function atualizarOpcoesControleMensal() {
+                const agora = new Date();
+                const mesAtualPadrao = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
+                const valorAnterior = controleMesSelect.value || mesAtualPadrao;
+
+                const mesesCompetenciaSet = new Set([mesAtualPadrao]);
+
+                todosCartoesCredito.forEach((cartao) => {
+                    const mapa = cartao.faturaDetalhada?.faturasPorCompetencia || {};
+                    Object.keys(mapa).forEach((chave) => mesesCompetenciaSet.add(chave));
+                });
+
+                todasTransacoes.forEach((t) => {
+                    if (t.contaTipo === 'BANK' && t.mesAnoChave) {
+                        mesesCompetenciaSet.add(t.mesAnoChave);
+                    }
+                });
+
+                const mesesOrdenados = [...mesesCompetenciaSet].sort((a, b) => b.localeCompare(a));
+                controleMesSelect.innerHTML = '';
+
+                mesesOrdenados.forEach((chave) => {
+                    const opt = document.createElement('option');
+                    opt.value = chave;
+                    const nomeMes = formatarMesExtenso(chave);
+                    const mesSeguinte = obterMesSeguinteExtenso(chave);
+                    opt.textContent = `${nomeMes} (Fatura venc. início de ${mesSeguinte})`;
+                    controleMesSelect.appendChild(opt);
+                });
+
+                if (mesesCompetenciaSet.has(valorAnterior)) {
+                    controleMesSelect.value = valorAnterior;
+                } else {
+                    controleMesSelect.value = mesAtualPadrao;
+                }
+            }
+
+            function renderizarControleMensal() {
+                if (!dadosJaCarregados) {
+                    if (bancosConectados.length === 0) {
+                        conteudoControleMensal.innerHTML = `
+                            <div class="aviso-vazio-dashboard">
+                                <p>Nenhum banco conectado ainda.</p>
+                                <p class="texto-suave">Vá na aba <strong>"Meus Bancos e Saldos"</strong> para vincular seus bancos (XP, Itau e Nubank).</p>
+                            </div>
+                        `;
+                    } else {
+                        conteudoControleMensal.innerHTML =
+                            '<p class="texto-suave">Carregando faturas e movimentações mensais de todos os bancos...</p>';
+                    }
+                    return;
+                }
+
+                const mesSel = controleMesSelect.value;
+                const bancoSel = controleBancoSelect.value;
+                const nomeMesExtenso = formatarMesExtenso(mesSel);
+                const nomeMesSeguinte = obterMesSeguinteExtenso(mesSel);
+
+                descricaoCompetenciaMensal.innerHTML = `
+                    Competência <strong>${nomeMesExtenso}</strong>: consolida a <strong>Fatura de gastos dos cartões em ${nomeMesExtenso}</strong> (a ser paga no início de <strong>${nomeMesSeguinte}</strong>) + <strong>Transferências e movimentações em dinheiro durante ${nomeMesExtenso}</strong> (apenas com contas terceiras; transferências próprias não somam nem subtraem).
+                `;
+
+                // 1. Faturas dos Cartões na Competência selecionada (ex: gastos de Novembro -> pagos no início de Dezembro)
+                const cartoesFiltrados = todosCartoesCredito.filter(
+                    (c) => bancoSel === 'TODOS' || c.bancoNome === bancoSel
+                );
+
+                let totalFaturasCartaoMes = 0;
+                let totalAvulsasCartaoMes = 0;
+                let totalParcelasCartaoMes = 0;
+                const cartoesFaturaMesLista = [];
+
+                cartoesFiltrados.forEach((cartao) => {
+                    const faturaComp = cartao.faturaDetalhada?.faturasPorCompetencia?.[mesSel] || null;
+                    const totalCartao = faturaComp ? Number(faturaComp.total) || 0 : 0;
+                    const avulsasCartao = faturaComp ? Number(faturaComp.comprasAvulsas) || 0 : 0;
+                    const parcelasCartao = faturaComp ? Number(faturaComp.parcelasDoMes) || 0 : 0;
+
+                    totalFaturasCartaoMes += totalCartao;
+                    totalAvulsasCartaoMes += avulsasCartao;
+                    totalParcelasCartaoMes += parcelasCartao;
+
+                    cartoesFaturaMesLista.push({
+                        cartao,
+                        faturaComp,
+                        totalCartao,
+                        avulsasCartao,
+                        parcelasCartao,
+                        itens: faturaComp?.itens || []
+                    });
+                });
+
+                // 2. Movimentações em Dinheiro / Conta Corrente durante o período do mês (01/MM a 30-31/MM)
+                const txBancariasDoMes = todasTransacoes.filter(
+                    (t) =>
+                        t.contaTipo === 'BANK' &&
+                        t.mesAnoChave === mesSel &&
+                        (bancoSel === 'TODOS' || t.bancoNome === bancoSel)
+                );
+
+                const entradasDinheiroMes = [];
+                const saidasDinheiroMes = [];
+                const propriasIgnoradasMes = [];
+
+                let totalEntradasMes = 0;
+                let totalSaidasDinheiroMes = 0;
+
+                txBancariasDoMes.forEach((t) => {
+                    const valorAbs = Math.abs(Number(t.amount) || 0);
+                    if (t.ehMovimentacaoPropria) {
+                        propriasIgnoradasMes.push(t);
+                        return;
+                    }
+                    if (t.type === 'CREDIT') {
+                        entradasDinheiroMes.push(t);
+                        totalEntradasMes += valorAbs;
+                    } else if (t.type === 'DEBIT') {
+                        saidasDinheiroMes.push(t);
+                        totalSaidasDinheiroMes += valorAbs;
+                    }
+                });
+
+                totalFaturasCartaoMes = Number(totalFaturasCartaoMes.toFixed(2));
+                totalAvulsasCartaoMes = Number(totalAvulsasCartaoMes.toFixed(2));
+                totalParcelasCartaoMes = Number(totalParcelasCartaoMes.toFixed(2));
+                totalEntradasMes = Number(totalEntradasMes.toFixed(2));
+                totalSaidasDinheiroMes = Number(totalSaidasDinheiroMes.toFixed(2));
+
+                const totalGeralGastosMes = Number(
+                    (totalFaturasCartaoMes + totalSaidasDinheiroMes).toFixed(2)
+                );
+                const saldoLiquidoMes = Number((totalEntradasMes - totalGeralGastosMes).toFixed(2));
+
+                const percCartaoNoGasto =
+                    totalGeralGastosMes > 0
+                        ? Math.round((totalFaturasCartaoMes / totalGeralGastosMes) * 100)
+                        : 0;
+                const percDinheiroNoGasto =
+                    totalGeralGastosMes > 0 ? 100 - percCartaoNoGasto : 0;
+                const percComprometimentoRenda =
+                    totalEntradasMes > 0
+                        ? Math.min(100, Math.round((totalGeralGastosMes / totalEntradasMes) * 100))
+                        : totalGeralGastosMes > 0
+                          ? 100
+                          : 0;
+
+                // Renderização dos cartões na Coluna 1 (Fatura por Cartão)
+                const cardsFaturasHtml =
+                    cartoesFaturaMesLista.length === 0
+                        ? '<p class="texto-suave">Nenhum cartão de crédito encontrado para o filtro selecionado.</p>'
+                        : cartoesFaturaMesLista
+                              .map(({ cartao, faturaComp, totalCartao, avulsasCartao, parcelasCartao, itens }) => {
+                                  const statusFatura = faturaComp?.status || 'SEM FATURA';
+                                  const classeBadgeStatus =
+                                      statusFatura === 'PAGA'
+                                          ? 'paga'
+                                          : statusFatura === 'ABERTA'
+                                            ? 'aberta-ciclo'
+                                            : 'aberta';
+                                  const textoStatus =
+                                      statusFatura === 'ABERTA'
+                                          ? `Fatura de ${nomeMesExtenso} • Pagto: ${faturaComp?.rotuloVencimento || `Início de ${nomeMesSeguinte}`}`
+                                          : statusFatura === 'PAGA'
+                                            ? `Paga • Venc. ${faturaComp?.rotuloVencimento || '-'}`
+                                            : statusFatura === 'FECHADA'
+                                              ? `Fechada • Venc. ${faturaComp?.rotuloVencimento || '-'}`
+                                              : 'Sem lançamentos nesta competência';
+
+                                  const listaItensHtml =
+                                      itens.length === 0
+                                          ? '<li class="item-vazio">Nenhum gasto registrado nesta fatura.</li>'
+                                          : itens
+                                                .map((item) => {
+                                                    const dataTxt = item.date
+                                                        ? new Date(item.date).toLocaleDateString('pt-BR')
+                                                        : '-';
+                                                    const badgeTipo =
+                                                        item.tipoItem === 'PARCELA'
+                                                            ? `<span class="badge-tag parcela">Parcela ${item.parcelaInfo}</span>`
+                                                            : `<span class="badge-tag avulsa">Compra no mês</span>`;
+                                                    return `
+                                                        <li>
+                                                            <div class="item-fatura-esq">
+                                                                <strong>${item.description}</strong>
+                                                                <div class="item-fatura-meta">
+                                                                    <small>${dataTxt}</small>
+                                                                    ${badgeTipo}
+                                                                </div>
+                                                            </div>
+                                                            <strong class="valor-debito">- ${formatarMoeda(item.amount)}</strong>
+                                                        </li>
+                                                    `;
+                                                })
+                                                .join('');
+
+                                  return `
+                                      <div class="card-fatura-competencia">
+                                          <div class="card-fatura-topo">
+                                              <div>
+                                                  <span class="tag-banco-card">${cartao.bancoNome}</span>
+                                                  <h4>${cartao.name}</h4>
+                                                  <span class="badge-status ${classeBadgeStatus}">${textoStatus}</span>
+                                              </div>
+                                              <div class="card-fatura-total">
+                                                  <small>Total da Fatura (${nomeMesExtenso})</small>
+                                                  <strong class="saldo credito">- ${formatarMoeda(totalCartao)}</strong>
+                                              </div>
+                                          </div>
+                                          <div class="subtotais-fatura-competencia">
+                                              <div>
+                                                  <span>Compras avulsas no mês:</span>
+                                                  <strong>${formatarMoeda(avulsasCartao)}</strong>
+                                              </div>
+                                              <div>
+                                                  <span>Parcelas do mês:</span>
+                                                  <strong>${formatarMoeda(parcelasCartao)}</strong>
+                                              </div>
+                                          </div>
+                                          <details class="lancamentos-fatura" open>
+                                              <summary>Itens desta fatura (${itens.length})</summary>
+                                              <ul class="lista-lancamentos-competencia">
+                                                  ${listaItensHtml}
+                                              </ul>
+                                          </details>
+                                      </div>
+                                  `;
+                              })
+                              .join('');
+
+                // Renderização das Entradas e Saídas em Dinheiro na Coluna 2
+                const renderizarListaMovimentacoesDinheiro = (lista, tipoSinal) => {
+                    if (lista.length === 0) {
+                        return '<li class="item-vazio">Nenhuma movimentação com terceiros neste período.</li>';
+                    }
+                    return lista
+                        .map((t) => {
+                            const dataTxt = new Date(t.date).toLocaleDateString('pt-BR');
+                            const valorAbs = Math.abs(Number(t.amount) || 0);
+                            const classeCor = tipoSinal === '+' ? 'valor-credito' : 'valor-debito';
+                            return `
+                                <li>
+                                    <div class="item-fatura-esq">
+                                        <strong>${t.description}</strong>
+                                        <div class="item-fatura-meta">
+                                            <small>${dataTxt}</small>
+                                            <span class="badge-tag origem-conta">${t.bancoNome} • ${t.contaNome}</span>
+                                            ${t.contraparteNome ? `<small class="texto-suave">• ${t.contraparteNome}</small>` : ''}
+                                        </div>
+                                    </div>
+                                    <strong class="${classeCor}">${tipoSinal} ${formatarMoeda(valorAbs)}</strong>
+                                </li>
+                            `;
+                        })
+                        .join('');
+                };
+
+                const listaPropriasHtml = propriasIgnoradasMes
+                    .map((t) => {
+                        const dataTxt = new Date(t.date).toLocaleDateString('pt-BR');
+                        const valorAbs = Math.abs(Number(t.amount) || 0);
+                        return `
+                            <li>
+                                <div class="item-fatura-esq">
+                                    <strong>${t.description}</strong>
+                                    <div class="item-fatura-meta">
+                                        <small>${dataTxt} • ${t.bancoNome}</small>
+                                        <span class="badge-tag propria">${t.motivoPropria || 'Entre Contas Próprias'}</span>
+                                    </div>
+                                </div>
+                                <strong class="valor-neutro">${formatarMoeda(valorAbs)} <small class="nota-neutra">Ignorado</small></strong>
+                            </li>
+                        `;
+                    })
+                    .join('');
+
+                conteudoControleMensal.innerHTML = `
+                    <!-- 5 KPIs do Controle Mensal -->
+                    <div class="kpi-mensal-grid">
+                        <div class="kpi-card kpi-entradas">
+                            <span class="kpi-label">1. Entradas no Mês (Dinheiro / PIX)</span>
+                            <strong class="kpi-valor positivo">+ ${formatarMoeda(totalEntradasMes)}</strong>
+                            <small class="kpi-sub">${entradasDinheiroMes.length} ${entradasDinheiroMes.length === 1 ? 'recebimento de terceiro' : 'recebimentos de terceiros'} em ${nomeMesExtenso}</small>
+                        </div>
+
+                        <div class="kpi-card kpi-fatura">
+                            <span class="kpi-label">2. Fatura Cartão (${nomeMesExtenso})</span>
+                            <strong class="kpi-valor negativo">- ${formatarMoeda(totalFaturasCartaoMes)}</strong>
+                            <small class="kpi-sub">Paga início de ${nomeMesSeguinte} • Avulsas: ${formatarMoeda(totalAvulsasCartaoMes)} | Parcelas: ${formatarMoeda(totalParcelasCartaoMes)}</small>
+                        </div>
+
+                        <div class="kpi-card kpi-saidas-dinheiro">
+                            <span class="kpi-label">3. Saídas em Dinheiro (${nomeMesExtenso})</span>
+                            <strong class="kpi-valor negativo">- ${formatarMoeda(totalSaidasDinheiroMes)}</strong>
+                            <small class="kpi-sub">${saidasDinheiroMes.length} ${saidasDinheiroMes.length === 1 ? 'transferência/pagamento' : 'transferências/pagamentos'} para terceiros</small>
+                        </div>
+
+                        <div class="kpi-card kpi-gasto-total">
+                            <span class="kpi-label">4. Total de Gastos do Mês (2 + 3)</span>
+                            <strong class="kpi-valor negativo">- ${formatarMoeda(totalGeralGastosMes)}</strong>
+                            <small class="kpi-sub">Fatura Cartão (${percCartaoNoGasto}%) + Dinheiro (${percDinheiroNoGasto}%)</small>
+                        </div>
+
+                        <div class="kpi-card kpi-balanco ${saldoLiquidoMes >= 0 ? 'balanco-positivo' : 'balanco-negativo'}">
+                            <span class="kpi-label">5. Balanço Líquido de ${nomeMesExtenso}</span>
+                            <strong class="kpi-valor ${saldoLiquidoMes >= 0 ? 'positivo' : 'negativo'}">
+                                ${saldoLiquidoMes >= 0 ? '+' : '-'} ${formatarMoeda(Math.abs(saldoLiquidoMes))}
+                            </strong>
+                            <small class="kpi-sub">
+                                ${saldoLiquidoMes >= 0 ? 'Saldo positivo após faturas e saídas' : 'Gastos superaram as entradas do mês'} (${percComprometimentoRenda}% das entradas)
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Barra de Composição dos Gastos do Mês -->
+                    <div class="barra-composicao-box">
+                        <div class="barra-composicao-legendas">
+                            <span><strong>Composição das Saídas de ${nomeMesExtenso}:</strong></span>
+                            <span><i class="dot dot-cartao"></i> Fatura dos Cartões (venc. início de ${nomeMesSeguinte}): <strong>${formatarMoeda(totalFaturasCartaoMes)} (${percCartaoNoGasto}%)</strong></span>
+                            <span><i class="dot dot-dinheiro"></i> Saídas em Dinheiro no mês: <strong>${formatarMoeda(totalSaidasDinheiroMes)} (${percDinheiroNoGasto}%)</strong></span>
+                        </div>
+                        <div class="barra-composicao-trilho">
+                            <div class="barra-fatia fatia-cartao" style="width: ${percCartaoNoGasto}%"></div>
+                            <div class="barra-fatia fatia-dinheiro" style="width: ${percDinheiroNoGasto}%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Painel Duplo: Fatura dos Cartões do Mês vs. Transferências em Dinheiro no Período -->
+                    <div class="painel-duplo-mensal">
+                        <!-- Coluna A: Faturas de Gastos do Cartão no Mês -->
+                        <div class="coluna-mensal">
+                            <div class="coluna-mensal-header header-cartao">
+                                <div>
+                                    <h4>Faturas de Gastos no Cartão em ${nomeMesExtenso}</h4>
+                                    <small>Valor que será pago no início de <strong>${nomeMesSeguinte}</strong></small>
+                                </div>
+                                <strong class="saldo credito">- ${formatarMoeda(totalFaturasCartaoMes)}</strong>
+                            </div>
+                            <div class="coluna-mensal-corpo">
+                                ${cardsFaturasHtml}
+                            </div>
+                        </div>
+
+                        <!-- Coluna B: Transferências e Movimentações em Dinheiro no Período do Mês -->
+                        <div class="coluna-mensal">
+                            <div class="coluna-mensal-header header-dinheiro">
+                                <div>
+                                    <h4>Transferências em Dinheiro em ${nomeMesExtenso}</h4>
+                                    <small>Entradas e saídas em conta corrente durante o mês (apenas terceiros)</small>
+                                </div>
+                                <div class="resumo-topo-dinheiro">
+                                    <span class="valor-credito">+ ${formatarMoeda(totalEntradasMes)}</span>
+                                    <span class="valor-debito">- ${formatarMoeda(totalSaidasDinheiroMes)}</span>
+                                </div>
+                            </div>
+
+                            <div class="coluna-mensal-corpo">
+                                <div class="bloco-movimentacoes-dinheiro">
+                                    <div class="subcabecalho-dinheiro entrada">
+                                        <span>Entradas Recebidas em Dinheiro / PIX (${entradasDinheiroMes.length})</span>
+                                        <strong class="valor-credito">+ ${formatarMoeda(totalEntradasMes)}</strong>
+                                    </div>
+                                    <ul class="lista-lancamentos-competencia">
+                                        ${renderizarListaMovimentacoesDinheiro(entradasDinheiroMes, '+')}
+                                    </ul>
+                                </div>
+
+                                <div class="bloco-movimentacoes-dinheiro">
+                                    <div class="subcabecalho-dinheiro saida">
+                                        <span>Saídas e Transferências em Dinheiro / PIX (${saidasDinheiroMes.length})</span>
+                                        <strong class="valor-debito">- ${formatarMoeda(totalSaidasDinheiroMes)}</strong>
+                                    </div>
+                                    <ul class="lista-lancamentos-competencia">
+                                        ${renderizarListaMovimentacoesDinheiro(saidasDinheiroMes, '-')}
+                                    </ul>
+                                </div>
+
+                                ${
+                                    propriasIgnoradasMes.length > 0
+                                        ? `
+                                    <details class="lancamentos-fatura bloco-proprias-ignoradas">
+                                        <summary>Movimentações entre contas próprias ignoradas em ${nomeMesExtenso} (${propriasIgnoradasMes.length})</summary>
+                                        <ul class="lista-lancamentos-competencia">
+                                            ${listaPropriasHtml}
+                                        </ul>
+                                    </details>
+                                `
+                                        : ''
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            controleMesSelect.addEventListener('change', renderizarControleMensal);
+            controleBancoSelect.addEventListener('change', renderizarControleMensal);
+            document.getElementById('btn-atualizar-controle').addEventListener('click', buscarContasDeTodosOsBancos);
+
+            function identificarBancoRealDaConta(conta, connector, nomeSlotFallback) {
+                const textoBusca = normalizarTexto(
+                    `${conta.name || ''} ${conta.marketingName || ''} ${connector?.name || ''}`
+                );
+                const transferNum = String(conta.bankData?.transferNumber || '');
+                const codBanco = transferNum.split('/')[0].trim();
+
+                if (
+                    textoBusca.includes('NUBANK') ||
+                    textoBusca.includes('NU PAGAMENTOS') ||
+                    textoBusca.includes('NUCONTA') ||
+                    textoBusca.includes('ULTRAVIOLETA') ||
+                    normalizarTexto(conta.name) === 'GOLD' ||
+                    normalizarTexto(conta.name) === 'PLATINUM' ||
+                    codBanco === '260'
+                ) {
+                    return 'Nubank';
+                }
+                if (
+                    textoBusca.includes('ITAU') ||
+                    textoBusca.includes('UNICLASS') ||
+                    textoBusca.includes('PERSONNALITE') ||
+                    codBanco === '341'
+                ) {
+                    return 'Itau';
+                }
+                if (
+                    textoBusca.includes('XP') ||
+                    textoBusca.includes('VISA INFINITE') ||
+                    codBanco === '102' ||
+                    codBanco === '348'
+                ) {
+                    return 'XP';
+                }
+                return nomeSlotFallback;
+            }
+
             async function buscarContasDeTodosOsBancos() {
                 if (bancosConectados.length === 0) {
+                    renderizarControleMensal();
                     alert('Vincule pelo menos um banco primeiro!');
                     return;
                 }
 
                 listaSaldos.innerHTML = '<p>Carregando contas de todos os bancos...</p>';
                 containerTabelaTransacoes.innerHTML = '<p>Carregando transações de todos os bancos...</p>';
+                conteudoControleMensal.innerHTML =
+                    '<p class="texto-suave">Carregando faturas de cartão e transferências do mês...</p>';
                 resumoGeralEl.style.display = 'none';
 
                 const respostas = await Promise.all(
@@ -804,9 +1329,14 @@
                 let somaFaturasMes = 0;
                 let alterouMetadadosBanco = false;
                 const transacoesColetadas = [];
+                const cartoesColetados = [];
+                const contasBancariasColetadas = [];
                 const cpfsTitularSet = new Set();
                 const nomesTitularSet = new Set();
                 const contasTitularSet = new Set();
+
+                const contasProcessadasSet = new Set();
+                const transacoesUnicasMap = new Map();
 
                 respostas.forEach(({ banco, idx, ok, dados }) => {
                     const nomeFixo = nomePadraoSlot(
@@ -852,6 +1382,20 @@
                     grid.className = 'cards-grid';
 
                     dados.results.forEach((conta) => {
+                        const bancoRealConta = identificarBancoRealDaConta(
+                            conta,
+                            connector,
+                            banco.nome
+                        );
+
+                        // Chave de deduplicação da conta (evita que a mesma conta/cartão apareça em dois slots se o mesmo banco foi importado duas vezes)
+                        const chaveConta = `${conta.type}|${conta.subtype || ''}|${normalizarTexto(conta.name)}|${apenasDigitos(conta.number)}|${Number(conta.balance || 0).toFixed(2)}`;
+                        if (contasProcessadasSet.has(conta.id) || contasProcessadasSet.has(chaveConta)) {
+                            return;
+                        }
+                        contasProcessadasSet.add(conta.id);
+                        contasProcessadasSet.add(chaveConta);
+
                         if (conta.taxNumber) {
                             const cpfLimpo = apenasDigitos(conta.taxNumber);
                             if (cpfLimpo) cpfsTitularSet.add(cpfLimpo);
@@ -870,8 +1414,21 @@
                                 ? conta.faturaDetalhada.faturaAberta.total
                                 : Number(conta.balance) || 0;
                             somaFaturasMes += valorFaturaMes;
+                            cartoesColetados.push({
+                                id: conta.id,
+                                name: conta.name,
+                                bancoNome: bancoRealConta,
+                                balance: conta.balance,
+                                faturaDetalhada: conta.faturaDetalhada || null
+                            });
                         } else {
                             somaContasBancarias += Number(conta.balance) || 0;
+                            contasBancariasColetadas.push({
+                                id: conta.id,
+                                name: conta.name,
+                                bancoNome: bancoRealConta,
+                                balance: conta.balance
+                            });
                         }
 
                         grid.appendChild(criarCardConta(conta));
@@ -880,13 +1437,25 @@
                             conta.transacoes.forEach((t) => {
                                 const numParc = t.creditCardMetadata?.installmentNumber;
                                 const totParc = t.creditCardMetadata?.totalInstallments;
+                                const parcelaInfo =
+                                    numParc && totParc && totParc > 1 ? `${numParc}/${totParc}` : null;
                                 const descLower = (t.description || '').toLowerCase();
                                 const ehPagamentoFatura =
                                     conta.type === 'CREDIT' &&
                                     t.type === 'CREDIT' &&
                                     (descLower.includes('fatura') || t.categoryId === '05100000');
 
-                                transacoesColetadas.push({
+                                const dataDia = (t.date || '').slice(0, 10);
+                                const descChave = normalizarTexto(t.description);
+                                const valorChave = Math.abs(Number(t.amount) || 0).toFixed(2);
+                                const contaChave = normalizarTexto(conta.name);
+
+                                // Chave única para impedir parcelas/transações duplicadas entre múltiplos itens
+                                const chaveTx = parcelaInfo
+                                    ? `INST|${(t.date || '').slice(0, 7)}|${descChave}|${parcelaInfo}|${valorChave}|${t.type}|${contaChave}`
+                                    : `TX|${dataDia}|${descChave}|${valorChave}|${t.type}|${contaChave}|${t.order ?? ''}`;
+
+                                const objTx = {
                                     id: t.id,
                                     date: t.date,
                                     mesAnoChave: (t.date || '').slice(0, 7),
@@ -899,15 +1468,18 @@
                                     operationType: t.operationType,
                                     paymentData: t.paymentData || null,
                                     merchantName: t.merchant?.businessName || t.merchant?.name || '',
-                                    parcelaInfo:
-                                        numParc && totParc && totParc > 1 ? `${numParc}/${totParc}` : null,
+                                    parcelaInfo,
                                     ehPagamentoFatura,
                                     itemId: banco.id,
-                                    bancoNome: banco.nome,
+                                    bancoNome: bancoRealConta,
                                     contaId: conta.id,
                                     contaNome: conta.name,
                                     contaTipo: conta.type
-                                });
+                                };
+
+                                if (!transacoesUnicasMap.has(chaveTx)) {
+                                    transacoesUnicasMap.set(chaveTx, objTx);
+                                }
                             });
                         }
                     });
@@ -915,6 +1487,8 @@
                     secaoBanco.appendChild(grid);
                     listaSaldos.appendChild(secaoBanco);
                 });
+
+                transacoesColetadas.push(...transacoesUnicasMap.values());
 
                 if (alterouMetadadosBanco) {
                     salvarBancos();
@@ -930,10 +1504,14 @@
                 todasTransacoes = transacoesColetadas.sort(
                     (a, b) => new Date(b.date) - new Date(a.date)
                 );
+                todosCartoesCredito = cartoesColetados;
+                todasContasBancarias = contasBancariasColetadas;
                 dadosJaCarregados = true;
 
                 atualizarOpcoesFiltrosTransacoes();
                 renderizarTabelaTransacoes();
+                atualizarOpcoesControleMensal();
+                renderizarControleMensal();
 
                 resumoGeralEl.style.display = 'flex';
                 resumoGeralEl.innerHTML = `
@@ -952,6 +1530,11 @@
             document.getElementById('btn-atualizar-transacoes').addEventListener('click', buscarContasDeTodosOsBancos);
 
             renderizarSlotsBancos();
+            if (bancosConectados.length > 0) {
+                buscarContasDeTodosOsBancos();
+            } else {
+                renderizarControleMensal();
+            }
         </script>
     </body>
 </html>

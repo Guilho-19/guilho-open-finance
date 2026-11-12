@@ -1,8 +1,10 @@
 body {
-  font-family: sans-serif;
-  max-width: 960px;
-  margin: 40px auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  max-width: 1180px;
+  margin: 32px auto;
   padding: 0 20px;
+  color: #24292f;
+  background: #f8fafc;
 }
 
 button {
@@ -568,4 +570,419 @@ pre {
 .badge-tag.terceiro {
   background: #ddf4ff;
   color: #0969da;
+}
+
+.badge-tag.avulsa {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+/* ===================================================
+   Dashboard de Controle Mensal (Fatura + Dinheiro)
+   =================================================== */
+.dashboard-mensal-box {
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.cabecalho-dashboard-mensal {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eaeef2;
+  margin-bottom: 20px;
+}
+
+.subtitulo-topo {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #0969da;
+  background: #ddf4ff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+.cabecalho-dashboard-mensal h3 {
+  margin: 0 0 6px 0;
+  font-size: 19px;
+}
+
+.cabecalho-dashboard-mensal p {
+  margin: 0;
+  max-width: 640px;
+  line-height: 1.4;
+}
+
+.controles-periodo-mensal {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.campo-controle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.campo-controle label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #57606a;
+  text-transform: uppercase;
+}
+
+.campo-controle select {
+  padding: 9px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  background: #fff;
+  min-width: 210px;
+}
+
+.kpi-mensal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.kpi-card {
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f9fbfd;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.kpi-card.kpi-entradas {
+  border-left: 4px solid #1a7f37;
+}
+
+.kpi-card.kpi-fatura {
+  border-left: 4px solid #cf222e;
+}
+
+.kpi-card.kpi-saidas-dinheiro {
+  border-left: 4px solid #d97706;
+}
+
+.kpi-card.kpi-gasto-total {
+  border-left: 4px solid #8250df;
+}
+
+.kpi-card.kpi-balanco.balanco-positivo {
+  background: #f0fdf4;
+  border-color: #86efac;
+  border-left: 4px solid #15803d;
+}
+
+.kpi-card.kpi-balanco.balanco-negativo {
+  background: #fef2f2;
+  border-color: #fecaca;
+  border-left: 4px solid #b91c1c;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #57606a;
+}
+
+.kpi-valor {
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.kpi-valor.positivo {
+  color: #1a7f37;
+}
+
+.kpi-valor.negativo {
+  color: #cf222e;
+}
+
+.kpi-sub {
+  font-size: 11px;
+  color: #57606a;
+  line-height: 1.35;
+}
+
+/* Barra de Composição dos Gastos */
+.barra-composicao-box {
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.barra-composicao-legendas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: #24292f;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+.dot-cartao {
+  background: #cf222e;
+}
+
+.dot-dinheiro {
+  background: #d97706;
+}
+
+.barra-composicao-trilho {
+  height: 10px;
+  background: #eaeef2;
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+}
+
+.barra-fatia {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.fatia-cartao {
+  background: #cf222e;
+}
+
+.fatia-dinheiro {
+  background: #d97706;
+}
+
+/* Painel Duplo Lado a Lado */
+.painel-duplo-mensal {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .painel-duplo-mensal {
+    grid-template-columns: 1fr;
+  }
+}
+
+.coluna-mensal {
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.coluna-mensal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #d0d7de;
+}
+
+.coluna-mensal-header.header-cartao {
+  background: #fff8f8;
+}
+
+.coluna-mensal-header.header-dinheiro {
+  background: #f6f8fa;
+}
+
+.coluna-mensal-header h4 {
+  margin: 0 0 3px 0;
+  font-size: 15px;
+}
+
+.coluna-mensal-header small {
+  color: #57606a;
+  font-size: 12px;
+}
+
+.resumo-topo-dinheiro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.coluna-mensal-corpo {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Card de Fatura por Cartão na Competência */
+.card-fatura-competencia {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fcfcfd;
+}
+
+.card-fatura-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.card-fatura-topo h4 {
+  margin: 4px 0 6px 0;
+  font-size: 15px;
+}
+
+.tag-banco-card {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: #24292f;
+  color: #fff;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.badge-status.aberta-ciclo {
+  background: #fff8c5;
+  color: #9a6700;
+  margin-left: 0;
+}
+
+.card-fatura-total {
+  text-align: right;
+}
+
+.card-fatura-total small {
+  display: block;
+  font-size: 11px;
+  color: #57606a;
+}
+
+.subtotais-fatura-competencia {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f6f8fa;
+  border: 1px solid #eaeef2;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.subtotais-fatura-competencia > div {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.lista-lancamentos-competencia {
+  list-style: none;
+  padding: 8px 0 0 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lista-lancamentos-competencia li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f2f4;
+  font-size: 12px;
+}
+
+.lista-lancamentos-competencia li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.item-fatura-esq {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.item-fatura-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: #57606a;
+}
+
+.item-vazio {
+  color: #6e7781;
+  font-style: italic;
+}
+
+.bloco-movimentacoes-dinheiro {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fcfcfd;
+}
+
+.subcabecalho-dinheiro {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #eaeef2;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.bloco-proprias-ignoradas {
+  border: 1px dashed #d0d7de;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fafafa;
+}
+
+.aviso-vazio-dashboard {
+  text-align: center;
+  padding: 28px 16px;
+  background: #f6f8fa;
+  border: 1px dashed #d0d7de;
+  border-radius: 8px;
 }
